@@ -22,159 +22,218 @@ import {
 } from 'lucide-react';
 
 // ============================================================================
-// BAZA BAZOWA DRUŻYN NBA (Używana jako fundament i automatycznie wzbogacana
-// o bilanse, składy i kontuzje pobierane w czasie rzeczywistym z ESPN Live API)
+// BAZA DRUŻYN NBA (Pierwsza piątka i Gwiazdy do precyzyjnej wyceny kontuzji)
 // ============================================================================
 const NBA_TEAMS_DB = {
   BOS: {
     id: 'BOS', name: 'Boston Celtics', short: 'BOS', conf: 'East', color: '#007A33',
     ortg: 123.2, drtg: 111.6, pace: 98.2, efg: 57.8, tov: 11.9, orb: 28.8, ftr: 20.5,
-    l10: 0.80, homeRecord: '33-6', awayRecord: '27-14', starPlayer: 'Jayson Tatum, Jaylen Brown'
+    l10: 0.80, homeRecord: '33-6', awayRecord: '27-14',
+    starPlayer: 'Jayson Tatum, Jaylen Brown',
+    keyRotation: ['Tatum', 'Brown', 'Porzingis', 'White', 'Holiday']
   },
   OKC: {
     id: 'OKC', name: 'Oklahoma City Thunder', short: 'OKC', conf: 'West', color: '#007AC1',
     ortg: 119.5, drtg: 111.0, pace: 100.6, efg: 57.3, tov: 12.4, orb: 24.5, ftr: 21.8,
-    l10: 0.70, homeRecord: '31-8', awayRecord: '25-15', starPlayer: 'Shai Gilgeous-Alexander, Chet Holmgren'
+    l10: 0.70, homeRecord: '31-8', awayRecord: '25-15',
+    starPlayer: 'Shai Gilgeous-Alexander, Chet Holmgren',
+    keyRotation: ['Gilgeous-Alexander', 'Holmgren', 'Williams', 'Hartenstein', 'Caruso']
   },
   DEN: {
     id: 'DEN', name: 'Denver Nuggets', short: 'DEN', conf: 'West', color: '#0E2240',
     ortg: 118.5, drtg: 112.3, pace: 97.4, efg: 56.2, tov: 12.6, orb: 30.2, ftr: 19.9,
-    l10: 0.80, homeRecord: '32-8', awayRecord: '24-17', starPlayer: 'Nikola Jokić, Jamal Murray'
+    l10: 0.80, homeRecord: '32-8', awayRecord: '24-17',
+    starPlayer: 'Nikola Jokić, Jamal Murray',
+    keyRotation: ['Jokic', 'Jokić', 'Murray', 'Gordon', 'Porter', 'Braun']
   },
   MIN: {
     id: 'MIN', name: 'Minnesota Timberwolves', short: 'MIN', conf: 'West', color: '#0C2340',
     ortg: 115.6, drtg: 109.0, pace: 97.8, efg: 55.9, tov: 14.2, orb: 27.5, ftr: 22.8,
-    l10: 0.70, homeRecord: '29-10', awayRecord: '26-15', starPlayer: 'Anthony Edwards, Rudy Gobert'
+    l10: 0.70, homeRecord: '29-10', awayRecord: '26-15',
+    starPlayer: 'Anthony Edwards, Rudy Gobert',
+    keyRotation: ['Edwards', 'Gobert', 'Randle', 'McDaniels', 'Conley']
   },
   NYK: {
     id: 'NYK', name: 'New York Knicks', short: 'NYK', conf: 'East', color: '#F58426',
     ortg: 118.2, drtg: 112.4, pace: 96.1, efg: 54.8, tov: 13.1, orb: 33.4, ftr: 21.2,
-    l10: 0.60, homeRecord: '27-12', awayRecord: '23-18', starPlayer: 'Jalen Brunson, Karl-Anthony Towns'
+    l10: 0.60, homeRecord: '27-12', awayRecord: '23-18',
+    starPlayer: 'Jalen Brunson, Karl-Anthony Towns',
+    keyRotation: ['Brunson', 'Towns', 'Anunoby', 'Bridges', 'Hart']
   },
   MIL: {
     id: 'MIL', name: 'Milwaukee Bucks', short: 'MIL', conf: 'East', color: '#00471B',
     ortg: 118.4, drtg: 115.2, pace: 100.2, efg: 56.8, tov: 12.7, orb: 24.8, ftr: 23.9,
-    l10: 0.60, homeRecord: '30-10', awayRecord: '19-20', starPlayer: 'Giannis Antetokounmpo, Damian Lillard'
+    l10: 0.60, homeRecord: '30-10', awayRecord: '19-20',
+    starPlayer: 'Giannis Antetokounmpo, Damian Lillard',
+    keyRotation: ['Antetokounmpo', 'Lillard', 'Lopez', 'Middleton', 'Portis']
   },
   DAL: {
     id: 'DAL', name: 'Dallas Mavericks', short: 'DAL', conf: 'West', color: '#00538C',
     ortg: 117.9, drtg: 114.6, pace: 100.1, efg: 56.5, tov: 12.1, orb: 25.9, ftr: 21.4,
-    l10: 0.80, homeRecord: '25-15', awayRecord: '25-15', starPlayer: 'Kyrie Irving, Klay Thompson'
+    l10: 0.80, homeRecord: '25-15', awayRecord: '25-15',
+    starPlayer: 'Kyrie Irving, Anthony Davis',
+    keyRotation: ['Irving', 'Davis', 'Thompson', 'Washington', 'Lively', 'Gafford']
   },
   CLE: {
     id: 'CLE', name: 'Cleveland Cavaliers', short: 'CLE', conf: 'East', color: '#860038',
     ortg: 116.2, drtg: 112.1, pace: 98.0, efg: 55.7, tov: 13.4, orb: 26.8, ftr: 20.1,
-    l10: 0.60, homeRecord: '26-14', awayRecord: '22-18', starPlayer: 'Donovan Mitchell, Evan Mobley'
+    l10: 0.60, homeRecord: '26-14', awayRecord: '22-18',
+    starPlayer: 'Donovan Mitchell, Evan Mobley',
+    keyRotation: ['Mitchell', 'Mobley', 'Garland', 'Allen', 'Strus']
   },
   PHX: {
     id: 'PHX', name: 'Phoenix Suns', short: 'PHX', conf: 'West', color: '#E56020',
     ortg: 117.6, drtg: 114.4, pace: 98.5, efg: 56.4, tov: 14.6, orb: 29.1, ftr: 23.4,
-    l10: 0.70, homeRecord: '25-15', awayRecord: '23-17', starPlayer: 'Kevin Durant, Devin Booker'
+    l10: 0.70, homeRecord: '25-15', awayRecord: '23-17',
+    starPlayer: 'Kevin Durant, Devin Booker',
+    keyRotation: ['Durant', 'Booker', 'Beal', 'Nurkic', 'Jones']
   },
   LAL: {
     id: 'LAL', name: 'Los Angeles Lakers', short: 'LAL', conf: 'West', color: '#552583',
     ortg: 115.9, drtg: 115.2, pace: 101.4, efg: 56.6, tov: 13.6, orb: 24.1, ftr: 24.8,
-    l10: 0.70, homeRecord: '28-12', awayRecord: '18-21', starPlayer: 'Luka Dončić, LeBron James'
+    l10: 0.70, homeRecord: '28-12', awayRecord: '18-21',
+    starPlayer: 'Luka Dončić, LeBron James',
+    keyRotation: ['Doncic', 'Dončić', 'James', 'Reaves', 'Hachimura']
   },
   IND: {
     id: 'IND', name: 'Indiana Pacers', short: 'IND', conf: 'East', color: '#002D62',
     ortg: 120.5, drtg: 118.0, pace: 102.3, efg: 57.9, tov: 12.8, orb: 26.2, ftr: 19.2,
-    l10: 0.60, homeRecord: '26-15', awayRecord: '21-20', starPlayer: 'Tyrese Haliburton, Pascal Siakam'
+    l10: 0.60, homeRecord: '26-15', awayRecord: '21-20',
+    starPlayer: 'Tyrese Haliburton, Pascal Siakam',
+    keyRotation: ['Haliburton', 'Siakam', 'Turner', 'Nembhard', 'Nesmith']
   },
   PHI: {
     id: 'PHI', name: 'Philadelphia 76ers', short: 'PHI', conf: 'East', color: '#006BB6',
     ortg: 116.8, drtg: 113.8, pace: 97.6, efg: 53.9, tov: 11.8, orb: 28.9, ftr: 24.2,
-    l10: 0.60, homeRecord: '25-15', awayRecord: '22-18', starPlayer: 'Joel Embiid, Tyrese Maxey'
+    l10: 0.60, homeRecord: '25-15', awayRecord: '22-18',
+    starPlayer: 'Joel Embiid, Tyrese Maxey',
+    keyRotation: ['Embiid', 'Maxey', 'George', 'Oubre']
   },
   ORL: {
     id: 'ORL', name: 'Orlando Magic', short: 'ORL', conf: 'East', color: '#0077C0',
     ortg: 113.4, drtg: 110.8, pace: 97.3, efg: 54.1, tov: 14.5, orb: 29.8, ftr: 25.1,
-    l10: 0.60, homeRecord: '29-11', awayRecord: '18-22', starPlayer: 'Paolo Banchero, Franz Wagner'
+    l10: 0.60, homeRecord: '29-11', awayRecord: '18-22',
+    starPlayer: 'Paolo Banchero, Franz Wagner',
+    keyRotation: ['Banchero', 'Wagner', 'Suggs', 'Carter']
   },
   SAC: {
     id: 'SAC', name: 'Sacramento Kings', short: 'SAC', conf: 'West', color: '#5A2D81',
     ortg: 116.9, drtg: 115.1, pace: 100.1, efg: 56.1, tov: 13.0, orb: 28.2, ftr: 19.6,
-    l10: 0.50, homeRecord: '24-16', awayRecord: '22-18', starPlayer: 'Domantas Sabonis, DeMar DeRozan'
+    l10: 0.50, homeRecord: '24-16', awayRecord: '22-18',
+    starPlayer: 'Domantas Sabonis, DeMar DeRozan',
+    keyRotation: ['Sabonis', 'DeRozan', 'LaVine', 'Murray', 'Monk']
   },
   GSW: {
     id: 'GSW', name: 'Golden State Warriors', short: 'GSW', conf: 'West', color: '#1D428A',
     ortg: 117.2, drtg: 115.0, pace: 99.8, efg: 55.8, tov: 14.1, orb: 31.2, ftr: 20.0,
-    l10: 0.70, homeRecord: '21-19', awayRecord: '25-15', starPlayer: 'Stephen Curry, Jimmy Butler'
+    l10: 0.70, homeRecord: '21-19', awayRecord: '25-15',
+    starPlayer: 'Stephen Curry, Jimmy Butler',
+    keyRotation: ['Curry', 'Butler', 'Green', 'Kuminga', 'Podziemski']
   },
   MIA: {
     id: 'MIA', name: 'Miami Heat', short: 'MIA', conf: 'East', color: '#98002E',
     ortg: 114.0, drtg: 112.2, pace: 96.2, efg: 53.8, tov: 12.6, orb: 25.6, ftr: 22.1,
-    l10: 0.60, homeRecord: '22-18', awayRecord: '24-16', starPlayer: 'Bam Adebayo, Tyler Herro'
+    l10: 0.60, homeRecord: '22-18', awayRecord: '24-16',
+    starPlayer: 'Bam Adebayo, Tyler Herro',
+    keyRotation: ['Adebayo', 'Herro', 'Wiggins', 'Rozier']
   },
   LAC: {
     id: 'LAC', name: 'LA Clippers', short: 'LAC', conf: 'West', color: '#C8102E',
     ortg: 118.1, drtg: 114.9, pace: 97.5, efg: 56.3, tov: 13.1, orb: 27.6, ftr: 22.5,
-    l10: 0.50, homeRecord: '25-15', awayRecord: '26-14', starPlayer: 'Kawhi Leonard, James Harden'
+    l10: 0.50, homeRecord: '25-15', awayRecord: '26-14',
+    starPlayer: 'Kawhi Leonard, James Harden',
+    keyRotation: ['Leonard', 'Harden', 'Powell', 'Zubac']
   },
   NOP: {
     id: 'NOP', name: 'New Orleans Pelicans', short: 'NOP', conf: 'West', color: '#0C2340',
     ortg: 116.7, drtg: 112.2, pace: 98.3, efg: 55.9, tov: 13.2, orb: 28.5, ftr: 22.2,
-    l10: 0.60, homeRecord: '21-19', awayRecord: '28-14', starPlayer: 'Zion Williamson, CJ McCollum'
+    l10: 0.60, homeRecord: '21-19', awayRecord: '28-14',
+    starPlayer: 'Zion Williamson, CJ McCollum',
+    keyRotation: ['Williamson', 'McCollum', 'Murray', 'Murphy', 'Jones', 'Poole']
   },
   HOU: {
     id: 'HOU', name: 'Houston Rockets', short: 'HOU', conf: 'West', color: '#CE1141',
     ortg: 114.5, drtg: 112.9, pace: 99.4, efg: 53.5, tov: 12.6, orb: 29.4, ftr: 21.8,
-    l10: 0.60, homeRecord: '27-13', awayRecord: '14-26', starPlayer: 'Alperen Şengün, Jalen Green'
+    l10: 0.60, homeRecord: '27-13', awayRecord: '14-26',
+    starPlayer: 'Alperen Şengün, Jalen Green',
+    keyRotation: ['Sengun', 'Şengün', 'Green', 'VanVleet', 'Brooks', 'Thompson']
   },
   CHI: {
     id: 'CHI', name: 'Chicago Bulls', short: 'CHI', conf: 'East', color: '#CE1141',
     ortg: 114.2, drtg: 116.1, pace: 96.9, efg: 53.4, tov: 12.1, orb: 28.1, ftr: 20.9,
-    l10: 0.50, homeRecord: '20-20', awayRecord: '19-21', starPlayer: 'Coby White, Nikola Vučević'
+    l10: 0.50, homeRecord: '20-20', awayRecord: '19-21',
+    starPlayer: 'Coby White, Nikola Vučević',
+    keyRotation: ['White', 'Vucevic', 'Vučević', 'Giddey', 'Dosunmu']
   },
   ATL: {
     id: 'ATL', name: 'Atlanta Hawks', short: 'ATL', conf: 'East', color: '#E03A3E',
     ortg: 116.6, drtg: 118.8, pace: 100.8, efg: 54.2, tov: 13.2, orb: 30.8, ftr: 22.0,
-    l10: 0.40, homeRecord: '21-20', awayRecord: '15-26', starPlayer: 'Trae Young, Jalen Johnson'
+    l10: 0.40, homeRecord: '21-20', awayRecord: '15-26',
+    starPlayer: 'Trae Young, Jalen Johnson',
+    keyRotation: ['Young', 'Johnson', 'Daniels', 'Capela', 'Risacher']
   },
   BKN: {
     id: 'BKN', name: 'Brooklyn Nets', short: 'BKN', conf: 'East', color: '#000000',
     ortg: 112.8, drtg: 116.0, pace: 97.6, efg: 53.1, tov: 12.9, orb: 28.0, ftr: 19.8,
-    l10: 0.40, homeRecord: '20-21', awayRecord: '12-29', starPlayer: 'Cam Thomas, Dennis Schröder'
+    l10: 0.40, homeRecord: '20-21', awayRecord: '12-29',
+    starPlayer: 'Cam Thomas, Cameron Johnson',
+    keyRotation: ['Thomas', 'Johnson', 'Claxton', 'Russell']
   },
   TOR: {
     id: 'TOR', name: 'Toronto Raptors', short: 'TOR', conf: 'East', color: '#CE1141',
     ortg: 112.1, drtg: 118.1, pace: 99.7, efg: 53.5, tov: 13.8, orb: 27.1, ftr: 20.4,
-    l10: 0.30, homeRecord: '14-27', awayRecord: '11-30', starPlayer: 'Scottie Barnes, RJ Barrett'
+    l10: 0.30, homeRecord: '14-27', awayRecord: '11-30',
+    starPlayer: 'Scottie Barnes, Brandon Ingram',
+    keyRotation: ['Barnes', 'Ingram', 'Barrett', 'Quickley', 'Poeltl']
   },
   MEM: {
     id: 'MEM', name: 'Memphis Grizzlies', short: 'MEM', conf: 'West', color: '#5D76A9',
     ortg: 109.8, drtg: 113.8, pace: 98.6, efg: 51.9, tov: 14.8, orb: 27.9, ftr: 20.2,
-    l10: 0.40, homeRecord: '9-32', awayRecord: '18-23', starPlayer: 'Ja Morant, Jaren Jackson Jr.'
+    l10: 0.40, homeRecord: '9-32', awayRecord: '18-23',
+    starPlayer: 'Ja Morant, Jaren Jackson Jr.',
+    keyRotation: ['Morant', 'Jackson', 'Bane', 'Edey', 'Aldama']
   },
   UTA: {
     id: 'UTA', name: 'Utah Jazz', short: 'UTA', conf: 'West', color: '#002B5C',
     ortg: 114.8, drtg: 119.9, pace: 100.2, efg: 53.9, tov: 15.3, orb: 31.0, ftr: 22.1,
-    l10: 0.30, homeRecord: '21-20', awayRecord: '10-31', starPlayer: 'Lauri Markkanen, Keyonte George'
+    l10: 0.30, homeRecord: '21-20', awayRecord: '10-31',
+    starPlayer: 'Lauri Markkanen, Keyonte George',
+    keyRotation: ['Markkanen', 'George', 'Sexton', 'Kessler', 'Collins']
   },
   SAS: {
     id: 'SAS', name: 'San Antonio Spurs', short: 'SAS', conf: 'West', color: '#C4CED4',
     ortg: 110.3, drtg: 116.4, pace: 101.5, efg: 52.8, tov: 14.9, orb: 26.5, ftr: 19.5,
-    l10: 0.40, homeRecord: '12-29', awayRecord: '10-31', starPlayer: 'Victor Wembanyama, De\'Aaron Fox'
+    l10: 0.40, homeRecord: '12-29', awayRecord: '10-31',
+    starPlayer: "Victor Wembanyama, De'Aaron Fox",
+    keyRotation: ['Wembanyama', 'Fox', 'Vassell', 'Sochan', 'Castle']
   },
   POR: {
     id: 'POR', name: 'Portland Trail Blazers', short: 'POR', conf: 'West', color: '#E03A3E',
     ortg: 108.6, drtg: 116.9, pace: 97.8, efg: 50.8, tov: 15.1, orb: 31.4, ftr: 20.6,
-    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31', starPlayer: 'Anfernee Simons, Scoot Henderson'
+    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31',
+    starPlayer: 'Anfernee Simons, Shaedon Sharpe',
+    keyRotation: ['Simons', 'Sharpe', 'Henderson', 'Grant', 'Ayton', 'Avdija']
   },
   CHA: {
     id: 'CHA', name: 'Charlotte Hornets', short: 'CHA', conf: 'East', color: '#1D1160',
     ortg: 109.1, drtg: 119.2, pace: 97.6, efg: 51.8, tov: 13.7, orb: 25.1, ftr: 19.1,
-    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31', starPlayer: 'LaMelo Ball, Brandon Miller'
+    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31',
+    starPlayer: 'LaMelo Ball, Brandon Miller',
+    keyRotation: ['Ball', 'Miller', 'Bridges', 'Williams']
   },
   WAS: {
     id: 'WAS', name: 'Washington Wizards', short: 'WAS', conf: 'East', color: '#002B5C',
     ortg: 110.2, drtg: 119.6, pace: 102.7, efg: 53.4, tov: 13.9, orb: 23.9, ftr: 19.3,
-    l10: 0.20, homeRecord: '7-34', awayRecord: '8-33', starPlayer: 'Jordan Poole, Kyle Kuzma'
+    l10: 0.20, homeRecord: '7-34', awayRecord: '8-33',
+    starPlayer: 'Jordan Poole, Bilal Coulibaly',
+    keyRotation: ['Poole', 'Coulibaly', 'Middleton', 'Sarr']
   },
   DET: {
     id: 'DET', name: 'Detroit Pistons', short: 'DET', conf: 'East', color: '#C8102E',
     ortg: 109.5, drtg: 118.4, pace: 100.1, efg: 52.1, tov: 15.0, orb: 28.4, ftr: 21.1,
-    l10: 0.20, homeRecord: '7-33', awayRecord: '7-35', starPlayer: 'Cade Cunningham, Jalen Duren'
+    l10: 0.20, homeRecord: '7-33', awayRecord: '7-35',
+    starPlayer: 'Cade Cunningham, Jalen Duren',
+    keyRotation: ['Cunningham', 'Duren', 'Ivey', 'Harris', 'Thompson']
   }
 };
 
@@ -201,7 +260,7 @@ const FALLBACK_MATCHES = [
 ];
 
 // ============================================================================
-// DETERMINISTYCZNY GENERATOR LOSOWY + BOX-MULLER (Stabilne kursy i wyniki)
+// FUNKCJE MATEMATYCZNE: GENERATOR DETERMINISTYCZNY + DYSTRYBUANTA GAUSSA (CDF)
 // ============================================================================
 function createSeededRandom(seedString) {
   let h = 2166136261 >>> 0;
@@ -225,8 +284,98 @@ function randomNormal(mean, stdDev, rng = Math.random) {
   return z0 * stdDev + mean;
 }
 
+// Dokładna dystrybuanta rozkładu normalnego (do realistycznego liczenia % Over/Under i Handicapów)
+function normalCDF(x, mean, stdDev) {
+  const z = (x - mean) / (stdDev * Math.sqrt(2));
+  const t = 1 / (1 + 0.3275911 * Math.abs(z));
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const erf = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t) * Math.exp(-z * z);
+  const sign = z < 0 ? -1 : 1;
+  return 0.5 * (1 + sign * erf);
+}
+
 // ============================================================================
-// SILNIK MONTE CARLO UWZGLĘDNIAJĄCY KONTUZJE LIVE (1-2H PRZED MECZEM)
+// REALISTYCZNA WYCENA KONTUZJI (Rozróżnienie: Gwiazda / Starter / Głęboka Ławka)
+// ============================================================================
+function calculateInjuryPenalty(injuriesList, teamObj) {
+  if (!injuriesList || injuriesList.length === 0) return { list: [], penalty: 0 };
+
+  const starStr = (teamObj?.starPlayer || '').toLowerCase();
+  const rotationArr = (teamObj?.keyRotation || []).map((n) => n.toLowerCase());
+
+  let totalPenalty = 0;
+  let benchPenaltyAcc = 0;
+  const parsedList = [];
+
+  injuriesList.forEach((item) => {
+    const athleteName = item.athlete?.displayName || item.athlete?.shortName || 'Zawodnik';
+    const lastName = athleteName.split(' ').pop().toLowerCase();
+    const rawStatus = (item.status || item.type?.description || 'Out').toUpperCase();
+
+    const isStar = starStr.includes(lastName);
+    const isStarter = !isStar && rotationArr.some((r) => r.includes(lastName) || lastName.includes(r));
+
+    let roleLabel = 'Rotacja/Ławka';
+    let baseImpact = 0.25; // Głęboki rezerwowy (jego minuty przejmują inni gracze)
+
+    if (isStar) {
+      roleLabel = 'GWIAZDA';
+      baseImpact = 2.4;
+    } else if (isStarter) {
+      roleLabel = 'Pierwsza Piątka';
+      baseImpact = 1.1;
+    }
+
+    let statusMultiplier = 0;
+    let statusBadge = 'OUT';
+
+    if (rawStatus.includes('OUT') || rawStatus.includes('INJURED')) {
+      statusMultiplier = 1.0;
+      statusBadge = 'OUT (Nie zagra)';
+    } else if (rawStatus.includes('DOUBTFUL')) {
+      statusMultiplier = 0.7;
+      statusBadge = 'DOUBTFUL (25% szans)';
+    } else if (rawStatus.includes('QUESTIONABLE') || rawStatus.includes('DAY-TO-DAY') || rawStatus.includes('GTD')) {
+      statusMultiplier = 0.35;
+      statusBadge = 'GTD (Decyzja przed meczem)';
+    }
+
+    const finalImpact = Number((baseImpact * statusMultiplier).toFixed(2));
+
+    if (finalImpact > 0) {
+      if (!isStar && !isStarter) {
+        // Maksymalny łączny wpływ graczy z głębokiej ławki to 0.6 pkt
+        if (benchPenaltyAcc < 0.6) {
+          const added = Math.min(finalImpact, 0.6 - benchPenaltyAcc);
+          benchPenaltyAcc += added;
+          totalPenalty += added;
+        }
+      } else {
+        totalPenalty += finalImpact;
+      }
+
+      parsedList.push({
+        name: athleteName,
+        role: roleLabel,
+        status: statusBadge,
+        impact: Number(finalImpact.toFixed(1)),
+        isKey: isStar || isStarter
+      });
+    }
+  });
+
+  return {
+    list: parsedList,
+    penalty: Number(Math.min(5.5, totalPenalty).toFixed(1))
+  };
+}
+
+// ============================================================================
+// SILNIK MONTE CARLO (Kontuzje korygują relację sił, bez psucia sumy punktów!)
 // ============================================================================
 function runMonteCarloSimulation(homeTeam, awayTeam, iterations, modifiers, seedKey = null) {
   const { homeCourtAdv = 2.8, homeB2B = false, awayB2B = false, homeInjuryImpact = 0, awayInjuryImpact = 0 } = modifiers;
@@ -254,19 +403,26 @@ function runMonteCarloSimulation(homeTeam, awayTeam, iterations, modifiers, seed
 
   const formDiff = (homeTeam.l10 - awayTeam.l10) * 2.2;
 
-  let expectedHomePts =
+  // KLUCZOWA POPRAWKA: Kontuzje działają głównie na różnicę sił między zespołami (netInjDiff),
+  // ponieważ zmiennicy przejmują rzuty nieobecnych, a słabsza obrona osłabionej drużyny pozwala też rzucić więcej rywalowi!
+  const netInjuryDiff = awayInjuryImpact - homeInjuryImpact; // Dodatnie = przewaga gospodarzy
+  const totalScoringDrag = (homeInjuryImpact + awayInjuryImpact) * 0.18; // Tylko minimalny spadek sumy punktów
+
+  const expectedHomePts =
     (baseHomeORTG / 100) * expectedPace +
     homeCourtAdv / 2 +
-    formDiff / 2 -
-    (homeB2B ? 2.4 : 0) -
-    homeInjuryImpact;
+    formDiff / 2 +
+    netInjuryDiff * 0.55 -
+    totalScoringDrag / 2 -
+    (homeB2B ? 1.8 : 0);
 
-  let expectedAwayPts =
+  const expectedAwayPts =
     (baseAwayORTG / 100) * expectedPace -
     homeCourtAdv / 2 -
     formDiff / 2 -
-    (awayB2B ? 2.4 : 0) -
-    awayInjuryImpact;
+    netInjuryDiff * 0.55 -
+    totalScoringDrag / 2 -
+    (awayB2B ? 1.8 : 0);
 
   const stdDevTeam = 11.2;
 
@@ -279,7 +435,7 @@ function runMonteCarloSimulation(homeTeam, awayTeam, iterations, modifiers, seed
   const projectedSpreadLine = Math.round((expectedAwayPts - expectedHomePts) * 2) / 2;
 
   for (let i = 0; i < iterations; i++) {
-    const paceShock = randomNormal(0, 3.2, rng);
+    const paceShock = randomNormal(0, 3.0, rng);
     let simHome = Math.round(randomNormal(expectedHomePts + paceShock, stdDevTeam, rng));
     let simAway = Math.round(randomNormal(expectedAwayPts + paceShock, stdDevTeam, rng));
 
@@ -309,54 +465,7 @@ function runMonteCarloSimulation(homeTeam, awayTeam, iterations, modifiers, seed
 }
 
 // ============================================================================
-// FUNKCJA ANALIZUJĄCA KONTUZJE POBRANE NA ŻYWO Z ESPN SUMMARY API
-// ============================================================================
-function calculateInjuryPenalty(injuriesList, starPlayersStr = '') {
-  if (!injuriesList || injuriesList.length === 0) return { list: [], penalty: 0 };
-
-  let penalty = 0;
-  const parsedList = [];
-
-  injuriesList.forEach((item) => {
-    const athleteName = item.athlete?.displayName || item.athlete?.shortName || 'Zawodnik';
-    const rawStatus = (item.status || item.type?.description || 'Out').toUpperCase();
-    const comment = item.shortComment || item.longComment || '';
-    const isStar = starPlayersStr.toLowerCase().includes(athleteName.split(' ').pop().toLowerCase());
-
-    let ptsImpact = 0;
-    let statusBadge = 'OUT';
-
-    if (rawStatus.includes('OUT') || rawStatus.includes('INJURED')) {
-      ptsImpact = isStar ? 3.4 : 1.3;
-      statusBadge = 'OUT (Nie zagra)';
-    } else if (rawStatus.includes('DOUBTFUL')) {
-      ptsImpact = isStar ? 2.4 : 0.9;
-      statusBadge = 'DOUBTFUL (25% szans)';
-    } else if (rawStatus.includes('QUESTIONABLE') || rawStatus.includes('DAY-TO-DAY') || rawStatus.includes('GTD')) {
-      ptsImpact = isStar ? 1.2 : 0.5;
-      statusBadge = 'GTD (Decyzja przed meczem)';
-    }
-
-    if (ptsImpact > 0) {
-      penalty += ptsImpact;
-      parsedList.push({
-        name: athleteName,
-        status: statusBadge,
-        impact: ptsImpact,
-        isStar,
-        comment
-      });
-    }
-  });
-
-  return {
-    list: parsedList,
-    penalty: Number(Math.min(8.5, penalty).toFixed(1))
-  };
-}
-
-// ============================================================================
-// GENERATOR REKOMENDACJI BUKMACHERSKICH (Z RAPORTEM KONTUZJI LIVE)
+// GENERATOR REKOMENDACJI BUKMACHERSKICH (Z REALISTYCZNYM ROZKŁADEM GAUSSA)
 // ============================================================================
 function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
   const taxMultiplier = taxRate ? 0.88 : 1.0;
@@ -392,7 +501,7 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
 
     const injuryReportText =
       homeInjList.length > 0 || awayInjList.length > 0
-        ? `Raport Składów Live: ${awayTeam.short} (-${awayPenalty} pkt, ${awayInjList.length} absencji) vs ${homeTeam.short} (-${homePenalty} pkt, ${homeInjList.length} absencji).`
+        ? `Raport Składów Live: ${awayTeam.short} (-${awayPenalty} pkt wpływu, ${awayInjList.length} absencji) vs ${homeTeam.short} (-${homePenalty} pkt wpływu, ${homeInjList.length} absencji).`
         : `Raport Składów Live: Brak kluczowych wykluczeń (pełne rotacje potwierdzone w API).`;
 
     // 1. Zwycięzca Gospodarz (ML Home)
@@ -416,7 +525,7 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
       ev: evHome,
       projectedScore: formattedScore,
       liveInjuries: match.liveInjuries,
-      confidenceScore: sim.homeWinProb * 0.65 + Math.max(-10, evHome) * 1.8,
+      confidenceScore: sim.homeWinProb * 0.75 + Math.max(-10, evHome) * 1.4,
       reasoning: [
         `Net Rating: ${homeTeam.short} (${netRtgHome > 0 ? '+' : ''}${netRtgHome}) vs ${awayTeam.short} (${netRtgAway > 0 ? '+' : ''}${netRtgAway}) + własny parkiet.`,
         injuryReportText,
@@ -445,7 +554,7 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
       ev: evAway,
       projectedScore: formattedScore,
       liveInjuries: match.liveInjuries,
-      confidenceScore: sim.awayWinProb * 0.65 + Math.max(-10, evAway) * 1.8,
+      confidenceScore: sim.awayWinProb * 0.75 + Math.max(-10, evAway) * 1.4,
       reasoning: [
         `Kurs bukmachera (${oddsAwayVal.toFixed(2)}) zestawiony z kursem sprawiedliwym modelu (${(1 / probAway).toFixed(2)}).`,
         injuryReportText,
@@ -453,14 +562,13 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
       ]
     });
 
-    // 3. Handicap (Spread)
+    // 3. Handicap (Spread) liczony z dystrybuanty Gaussa (odchylenie standardowe różnicy punktów w NBA = 13.5 pkt)
     const idSpread = `${match.id}_SPREAD`;
     const bookieSpread = match.bookieOdds.spreadLine || -4.5;
     const modelMarginHome = sim.avgHomePts - sim.avgAwayPts;
-    const spreadDiff = modelMarginHome + bookieSpread;
-    const coverHomeProb = Math.min(82, Math.max(18, 50 + spreadDiff * 3.1));
-    const pickHomeSpread = coverHomeProb >= 50;
-    const finalSpreadProb = pickHomeSpread ? coverHomeProb : 100 - coverHomeProb;
+    const coverHomeProbRaw = (1 - normalCDF(-bookieSpread, modelMarginHome, 13.5)) * 100;
+    const pickHomeSpread = coverHomeProbRaw >= 50;
+    const finalSpreadProb = Math.min(74.5, Math.max(25.5, pickHomeSpread ? coverHomeProbRaw : 100 - coverHomeProbRaw));
     const defaultSpreadOdds = pickHomeSpread ? (match.bookieOdds.spreadHomeOdds || 1.90) : (match.bookieOdds.spreadAwayOdds || 1.90);
     const spreadOdds = customOddsMap[idSpread] ?? defaultSpreadOdds;
     const evSpread = ((finalSpreadProb / 100) * (spreadOdds * taxMultiplier) - 1) * 100;
@@ -482,21 +590,20 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
       ev: evSpread,
       projectedScore: formattedScore,
       liveInjuries: match.liveInjuries,
-      confidenceScore: finalSpreadProb * 0.65 + Math.max(-10, evSpread) * 1.8,
+      confidenceScore: finalSpreadProb * 0.65 + Math.max(-10, evSpread) * 1.4,
       reasoning: [
         `Prognozowana różnica punktów: ${formattedScore} wobec linii handicapu (${bookieSpread}).`,
         injuryReportText,
-        `Pokrycie linii handicapu w ${finalSpreadProb.toFixed(1)}% symulacji.`
+        `Pokrycie linii handicapu w ${finalSpreadProb.toFixed(1)}% rozkładu normalnego (σ=13.5 pkt).`
       ]
     });
 
-    // 4. Suma Punktów (Over/Under)
+    // 4. Suma Punktów (Over/Under) liczona z dystrybuanty Gaussa (odchylenie sumy punktów w NBA = 16.5 pkt)
     const idTotal = `${match.id}_TOTAL`;
     const bookieTotal = match.bookieOdds.totalLine || 224.5;
-    const totalDiff = sim.avgTotalPts - bookieTotal;
-    const overLineProb = Math.min(84, Math.max(16, 50 + totalDiff * 2.7));
-    const pickOver = overLineProb >= 50;
-    const finalTotalProb = pickOver ? overLineProb : 100 - overLineProb;
+    const overProbRaw = (1 - normalCDF(bookieTotal, sim.avgTotalPts, 16.5)) * 100;
+    const pickOver = overProbRaw >= 50;
+    const finalTotalProb = Math.min(72.5, Math.max(27.5, pickOver ? overProbRaw : 100 - overProbRaw));
     const defaultTotalOdds = pickOver ? (match.bookieOdds.overOdds || 1.90) : (match.bookieOdds.underOdds || 1.90);
     const totalOdds = customOddsMap[idTotal] ?? defaultTotalOdds;
     const evTotal = ((finalTotalProb / 100) * (totalOdds * taxMultiplier) - 1) * 100;
@@ -516,7 +623,7 @@ function generateAllSmartPicks(matches, taxRate, customOddsMap = {}) {
       ev: evTotal,
       projectedScore: formattedScore,
       liveInjuries: match.liveInjuries,
-      confidenceScore: finalTotalProb * 0.65 + Math.max(-10, evTotal) * 1.8,
+      confidenceScore: finalTotalProb * 0.65 + Math.max(-10, evTotal) * 1.4,
       reasoning: [
         `Prognozowana suma z modelu to ${sim.avgTotalPts.toFixed(1)} pkt (linia bukmachera: ${bookieTotal} pkt).`,
         injuryReportText,
@@ -539,10 +646,8 @@ export default function App() {
   const [dataSourceStatus, setDataSourceStatus] = useState('Połączono z ESPN Live API (Mecze + Raport Kontuzji)');
   const [lastSyncTime, setLastSyncTime] = useState('Dzisiaj');
 
-  // Ręcznie nadpisane kursy od bukmachera (np. z STS)
   const [customOddsMap, setCustomOddsMap] = useState({});
 
-  // Parametry Symulacji (Match Lab)
   const [simCount, setSimCount] = useState(10000);
   const [homeCourtAdv, setHomeCourtAdv] = useState(2.8);
   const [homeB2B, setHomeB2B] = useState(false);
@@ -550,7 +655,6 @@ export default function App() {
   const [homeInjuryImpact, setHomeInjuryImpact] = useState(0);
   const [awayInjuryImpact, setAwayInjuryImpact] = useState(0);
 
-  // Parametry Bukmacherskie i Kuponu AKO
   const [oddsHome, setOddsHome] = useState(FALLBACK_MATCHES[0].bookieOdds.home);
   const [oddsAway, setOddsAway] = useState(FALLBACK_MATCHES[0].bookieOdds.away);
   const [taxRate, setTaxRate] = useState(true);
@@ -558,15 +662,13 @@ export default function App() {
   const [couponStake, setCouponStake] = useState(2);
   const [kellyFraction, setKellyFraction] = useState(0.25);
 
-  // Generator Kuponów AKO
   const [targetMinOdds, setTargetMinOdds] = useState(2.0);
   const [builderStrategy, setBuilderStrategy] = useState('safe');
+  // Domyślnie budujemy kupon z typów Zwycięzca (ML - 1/2), tak jak grasz w STS!
+  const [builderMarketScope, setBuilderMarketScope] = useState('ML_ONLY'); // 'ML_ONLY' | 'ALL_MARKETS'
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [couponPickIds, setCouponPickIds] = useState([]);
 
-  // ==========================================================================
-  // POBIERANIE TERMINARZA + SKŁADÓW I KONTUZJI NA ŻYWO Z ESPN SUMMARY API
-  // ==========================================================================
   const fetchLiveNBAScheduleAndInjuries = async () => {
     setIsLoadingLive(true);
     try {
@@ -590,7 +692,6 @@ export default function App() {
 
             if (!NBA_TEAMS_DB[homeAbbr] || !NBA_TEAMS_DB[awayAbbr]) return null;
 
-            // Dynamiczne wzbogacenie danych o aktualny bilans i liderów z API
             const homeRecordLive = homeComp.records?.[0]?.summary || NBA_TEAMS_DB[homeAbbr].homeRecord;
             const awayRecordLive = awayComp.records?.[0]?.summary || NBA_TEAMS_DB[awayAbbr].awayRecord;
 
@@ -608,7 +709,6 @@ export default function App() {
               starPlayer: awayLeader ? `${awayLeader}, ${NBA_TEAMS_DB[awayAbbr].starPlayer}` : NBA_TEAMS_DB[awayAbbr].starPlayer
             };
 
-            // POBIERANIE RAPORTU KONTUZJI I SKŁADÓW Z ENDPOINTU SUMMARY DLA DANEGO MECZU
             let liveInjuries = { home: [], away: [], homePenalty: 0, awayPenalty: 0 };
             try {
               const summaryRes = await fetch(
@@ -624,8 +724,8 @@ export default function App() {
                     (inj) => (ESPN_ABBR_MAP[inj.team?.abbreviation] || inj.team?.abbreviation) === awayAbbr
                   );
 
-                  const parsedHomeInj = calculateInjuryPenalty(homeInjObj?.injuries || [], homeTeamDynamic.starPlayer);
-                  const parsedAwayInj = calculateInjuryPenalty(awayInjObj?.injuries || [], awayTeamDynamic.starPlayer);
+                  const parsedHomeInj = calculateInjuryPenalty(homeInjObj?.injuries || [], homeTeamDynamic);
+                  const parsedAwayInj = calculateInjuryPenalty(awayInjObj?.injuries || [], awayTeamDynamic);
 
                   liveInjuries = {
                     home: parsedHomeInj.list,
@@ -636,10 +736,9 @@ export default function App() {
                 }
               }
             } catch (e) {
-              // Jeśli endpoint szczegółów nie odpowie, zachowujemy zerowe kary
+              // Ignoruj błąd pojedynczego podzapytania
             }
 
-            // Sprawdzenie, czy ESPN podaje bezpośrednie kursy bukmacherskie w obiekcie odds
             const espnOdds = comp.odds?.[0];
             const quickSim = runMonteCarloSimulation(
               homeTeamDynamic,
@@ -701,7 +800,7 @@ export default function App() {
             0
           );
           setDataSourceStatus(
-            `ESPN Live API: ${validMatches.length} meczów • Wykryto ${totalInjuriesFound} raportów o absencjach w składach`
+            `ESPN Live API: ${validMatches.length} meczów • Przeanalizowano ${totalInjuriesFound} raportów o absencjach`
           );
         }
       }
@@ -737,12 +836,10 @@ export default function App() {
     setAwayInjuryImpact(match.liveInjuries?.awayPenalty || 0);
   };
 
-  // Wszystkie wyliczone propozycje typów (uwzględniające Twoje ręcznie wpisane kursy z STS!)
   const allSmartPicks = useMemo(() => {
     return generateAllSmartPicks(matches, taxRate, customOddsMap);
   }, [matches, taxRate, customOddsMap]);
 
-  // Funkcja zmiany kursu na własny (np. przepisany z aplikacji STS)
   const handleUpdatePickOdd = (pickId, newOddValue) => {
     const num = parseFloat(newOddValue);
     if (!isNaN(num) && num >= 1.01) {
@@ -760,18 +857,22 @@ export default function App() {
     });
   }, [allSmartPicks, marketFilter]);
 
-  // Aktywne obiekty na kuponie (zawsze zsynchronizowane z listą po lewej!)
   const couponPicks = useMemo(() => {
     return couponPickIds
       .map((id) => allSmartPicks.find((p) => p.id === id))
       .filter(Boolean);
   }, [couponPickIds, allSmartPicks]);
 
-  const buildAutoCoupon = (minOddsTarget, strategy = builderStrategy) => {
+  const buildAutoCoupon = (minOddsTarget, strategy = builderStrategy, scope = builderMarketScope) => {
     setTargetMinOdds(minOddsTarget);
     setBuilderStrategy(strategy);
+    setBuilderMarketScope(scope);
 
-    const pool = [...allSmartPicks].filter((p) => p.odds >= 1.25 && p.prob >= 48);
+    let pool = [...allSmartPicks].filter((p) => p.odds >= 1.22 && p.prob >= 50);
+
+    if (scope === 'ML_ONLY') {
+      pool = pool.filter((p) => p.marketType === 'Zwycięzca (ML)');
+    }
 
     if (strategy === 'safe') {
       pool.sort((a, b) => b.prob - a.prob);
@@ -801,7 +902,7 @@ export default function App() {
 
   useEffect(() => {
     if (allSmartPicks.length > 0 && couponPickIds.length === 0) {
-      buildAutoCoupon(2.0, 'safe');
+      buildAutoCoupon(2.0, 'safe', 'ML_ONLY');
     }
   }, [allSmartPicks]);
 
@@ -818,7 +919,6 @@ export default function App() {
     }
   };
 
-  // Podsumowanie finansowe Kuponu AKO
   const couponSummary = useMemo(() => {
     if (couponPicks.length === 0) {
       return { totalOdds: 0, combinedProb: 0, potentialWin: 0, netProfit: 0, akoEv: 0, kellySuggested: 0 };
@@ -899,7 +999,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* PASEK NAWIGACJI GÓRNEJ */}
       <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -912,7 +1011,7 @@ export default function App() {
                   QUANT<span className="text-orange-500">BET</span> PRO
                 </h1>
                 <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Live Rosters & Injury AI v4.0
+                  Calibrated Gauss & Injury AI v4.1
                 </span>
               </div>
               <p className="text-xs text-slate-400">{dataSourceStatus}</p>
@@ -959,7 +1058,6 @@ export default function App() {
               onClick={fetchLiveNBAScheduleAndInjuries}
               disabled={isLoadingLive}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors shadow-md"
-              title="Pobierz najnowsze składy i raporty kontuzji (szczególnie ważne 1-2h przed meczem)"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLive ? 'animate-spin' : ''}`} />
               <span>Skanuj Składy Live ({lastSyncTime})</span>
@@ -968,25 +1066,42 @@ export default function App() {
         </div>
       </header>
 
-      {/* ========================================================================
-          WIDOK 1: CO OBSTAWIAĆ & GENERATOR KUPONÓW AKO
-         ======================================================================== */}
       {activeView === 'smart-builder' && (
         <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
-            {/* PANEL GENERATORA KUPONÓW POWYŻEJ ZADANEGO KURSU */}
             <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/60 border border-indigo-500/30 rounded-2xl p-5 shadow-xl">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                 <div>
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-orange-400 bg-orange-500/10 px-2.5 py-0.5 rounded-full border border-orange-500/20 mb-1">
-                    <Stethoscope className="w-3.5 h-3.5" /> Zintegrowano ze Składami i Kontuzjami ESPN Live
+                    <Stethoscope className="w-3.5 h-3.5" /> Skalibrowana Waga Rotacji (Gwiazda / Starter / Ławka)
                   </span>
                   <h2 className="text-xl font-black text-white">
                     Automatyczny Kreator Kuponów pod Wybrany Kurs
                   </h2>
-                  <p className="text-xs text-slate-400">
-                    Możesz edytować dowolny kurs ręcznie (np. wpisując dokładny kurs z aplikacji STS), a kupon i EV% zaktualizują się natychmiast.
-                  </p>
+                </div>
+
+                {/* Wybór czy kupon ma brać tylko Zwycięzców Meczu (1/2) jak w STS, czy wszystkie rynki */}
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  <button
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, 'ML_ONLY')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      builderMarketScope === 'ML_ONLY'
+                        ? 'bg-orange-500 text-slate-950'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Tylko Zwycięzca (1/2)
+                  </button>
+                  <button
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, 'ALL_MARKETS')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      builderMarketScope === 'ALL_MARKETS'
+                        ? 'bg-orange-500 text-slate-950'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Wszystkie Rynki (z O/U)
+                  </button>
                 </div>
               </div>
 
@@ -1001,7 +1116,7 @@ export default function App() {
                   return (
                     <button
                       key={preset.target}
-                      onClick={() => buildAutoCoupon(preset.target, builderStrategy)}
+                      onClick={() => buildAutoCoupon(preset.target, builderStrategy, builderMarketScope)}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         isActive
                           ? 'bg-orange-500/15 border-orange-500 text-white shadow-lg shadow-orange-500/10'
@@ -1031,7 +1146,7 @@ export default function App() {
                     max="12.0"
                     step="0.25"
                     value={targetMinOdds}
-                    onChange={(e) => buildAutoCoupon(Number(e.target.value), builderStrategy)}
+                    onChange={(e) => buildAutoCoupon(Number(e.target.value), builderStrategy, builderMarketScope)}
                     className="w-full accent-orange-500 cursor-pointer"
                   />
                 </div>
@@ -1044,7 +1159,7 @@ export default function App() {
                   ].map((st) => (
                     <button
                       key={st.id}
-                      onClick={() => buildAutoCoupon(targetMinOdds, st.id)}
+                      onClick={() => buildAutoCoupon(targetMinOdds, st.id, builderMarketScope)}
                       className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
                         builderStrategy === st.id
                           ? 'bg-indigo-600 text-white'
@@ -1058,7 +1173,7 @@ export default function App() {
 
                 <div className="md:col-span-2">
                   <button
-                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy)}
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, builderMarketScope)}
                     className="w-full py-2 px-3 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-1 shadow-md"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Generuj
@@ -1067,7 +1182,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* RANKING REKOMENDACJI MODELU */}
+            {/* LISTA REKOMENDACJI */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div>
@@ -1076,7 +1191,7 @@ export default function App() {
                     Co Obstawiać Dzisiaj? Ranking Rekomendacji Modelu ({filteredSmartPicks.length})
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Możesz kliknąć w pole „Kurs Bukmachera” przy dowolnym meczu i wpisać dokładny kurs ze swojego bukmachera (np. STS).
+                    Kliknij w pole „Kurs (Edytuj)”, aby wpisać dokładny kurs ze swojego bukmachera (np. STS).
                   </p>
                 </div>
 
@@ -1151,7 +1266,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Edytowalny kurs bukmachera + przycisk dodania do kuponu */}
                         <div className="flex items-center gap-3 ml-auto">
                           <div className="text-right">
                             <div className="text-[11px] text-slate-400">Szansa Modelu</div>
@@ -1213,7 +1327,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* PRAWA KOLUMNA (4/12): TWÓJ KUPON AKO Z EDYTOWALNYMI KURSAMI Z STS */}
+          {/* PRAWA KOLUMNA: TWÓJ KUPON AKO */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-slate-900 border-2 border-orange-500/40 rounded-2xl p-5 sticky top-20 shadow-2xl">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
@@ -1265,7 +1379,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* EDYTOWALNE OKIENKO KURSU NA KUPONIE (NP. POD STS) */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           <div className="px-2 py-1 rounded-lg bg-orange-500/15 border border-orange-500/40 flex flex-col items-end">
                             <span className="text-[8px] uppercase text-orange-300/80 font-bold">Kurs STS:</span>
@@ -1276,13 +1389,11 @@ export default function App() {
                               value={item.odds}
                               onChange={(e) => handleUpdatePickOdd(item.id, e.target.value)}
                               className="w-14 bg-transparent text-right font-mono text-xs font-black text-orange-300 focus:outline-none"
-                              title="Kliknij, aby wpisać dokładny kurs ze swojego kuponu u bukmachera"
                             />
                           </div>
                           <button
                             onClick={() => togglePickInCoupon(item)}
                             className="p-1 text-slate-500 hover:text-rose-400"
-                            title="Usuń z kuponu"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1291,7 +1402,6 @@ export default function App() {
                     ))}
                   </div>
 
-                  {/* Parametry finansowe kuponu */}
                   <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">Kurs Całkowity (AKO):</span>
@@ -1363,7 +1473,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* GŁĘBOKA ANALIZA STATYSTYCZNA + RAPORT KONTUZJI NA KUPONIE */}
+                  {/* ANALIZA I LISTA KONTUZJI NA KUPONIE Z PODZIAŁEM NA ROLE W DRUŻYNIE */}
                   <div className="mt-4 pt-4 border-t border-slate-800">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-indigo-400" />
@@ -1415,20 +1525,19 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* Wyświetlenie wykrytych kontuzji bezpośrednio na kuponie */}
                             {(homeInj.length > 0 || awayInj.length > 0) ? (
                               <div className="bg-rose-950/30 border border-rose-500/30 rounded-lg p-2 text-[10px] text-rose-200 space-y-1">
                                 <div className="font-bold text-rose-400 flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" /> Wykryte osłabienia w składach (Live API):
+                                  <AlertTriangle className="w-3 h-3" /> Raport Składów (Waga roli w zespole):
                                 </div>
                                 {awayInj.map((inj, i) => (
                                   <div key={`a_${i}`}>
-                                    • <strong>{item.awayTeam.short}</strong>: {inj.name} ({inj.status}, -{inj.impact} pkt)
+                                    • <strong>{item.awayTeam.short}</strong>: {inj.name} [{inj.role}] ({inj.status}, -{inj.impact} pkt)
                                   </div>
                                 ))}
                                 {homeInj.map((inj, i) => (
                                   <div key={`h_${i}`}>
-                                    • <strong>{item.homeTeam.short}</strong>: {inj.name} ({inj.status}, -{inj.impact} pkt)
+                                    • <strong>{item.homeTeam.short}</strong>: {inj.name} [{inj.role}] ({inj.status}, -{inj.impact} pkt)
                                   </div>
                                 ))}
                               </div>
@@ -1449,9 +1558,6 @@ export default function App() {
         </main>
       )}
 
-      {/* ========================================================================
-          WIDOK 2: LABORATORIUM POJEDYNCZEGO MECZU + PEŁNY RAPORT KONTUZJI LIVE
-         ======================================================================== */}
       {activeView === 'match-lab' && (
         <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-3 space-y-6">
@@ -1521,8 +1627,8 @@ export default function App() {
                 <input
                   type="range"
                   min="0"
-                  max="9"
-                  step="0.5"
+                  max="6"
+                  step="0.2"
                   value={homeInjuryImpact}
                   onChange={(e) => setHomeInjuryImpact(Number(e.target.value))}
                   className="w-full accent-rose-500"
@@ -1537,8 +1643,8 @@ export default function App() {
                 <input
                   type="range"
                   min="0"
-                  max="9"
-                  step="0.5"
+                  max="6"
+                  step="0.2"
                   value={awayInjuryImpact}
                   onChange={(e) => setAwayInjuryImpact(Number(e.target.value))}
                   className="w-full accent-rose-500"
@@ -1580,7 +1686,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sekcja Kontuzji pobrana na żywo z ESPN dla wybranego meczu */}
               <div className="mt-4 pt-4 border-t border-slate-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2 flex items-center gap-1.5">
                   <Stethoscope className="w-4 h-4 text-rose-400" />
@@ -1595,7 +1700,7 @@ export default function App() {
                     {(selectedMatch.liveInjuries?.away?.length || 0) > 0 ? (
                       selectedMatch.liveInjuries.away.map((inj, i) => (
                         <div key={i} className="text-[11px] text-rose-300 py-0.5">
-                          • <strong>{inj.name}</strong>: {inj.status} (-{inj.impact} pkt)
+                          • <strong>{inj.name}</strong> [{inj.role}]: {inj.status} (-{inj.impact} pkt)
                         </div>
                       ))
                     ) : (
@@ -1611,7 +1716,7 @@ export default function App() {
                     {(selectedMatch.liveInjuries?.home?.length || 0) > 0 ? (
                       selectedMatch.liveInjuries.home.map((inj, i) => (
                         <div key={i} className="text-[11px] text-rose-300 py-0.5">
-                          • <strong>{inj.name}</strong>: {inj.status} (-{inj.impact} pkt)
+                          • <strong>{inj.name}</strong> [{inj.role}]: {inj.status} (-{inj.impact} pkt)
                         </div>
                       ))
                     ) : (
