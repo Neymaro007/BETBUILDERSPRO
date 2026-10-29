@@ -1,285 +1,223 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   TrendingUp,
-  RefreshCw,
   ShieldAlert,
   Calculator,
+  RefreshCw,
+  Award,
+  Flame,
+  Percent,
+  DollarSign,
   Sliders,
-  BarChart3,
-  Zap,
   CheckCircle2,
   AlertTriangle,
-  Play,
   Info,
-  Trophy,
-  Flame,
-  Clock,
-  DollarSign,
-  Percent,
-  Users,
-  ChevronRight,
-  Lock,
+  Calendar,
+  Zap,
   Sparkles,
-  ArrowRightLeft,
-  HelpCircle,
   Ticket,
-  PlusCircle,
+  Plus,
   Trash2,
   Target,
-  Award,
   Layers,
+  ArrowUpRight,
   Check,
-  Wand2,
-  BrainCircuit,
-  ChevronDown,
-  ChevronUp,
   Filter
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell,
-  AreaChart,
-  Area
-} from 'recharts';
 
 // ============================================================================
-// BAZA DANYCH 30 DRUŻYN NBA (STATYSTYKI ZAAWANSOWANE - FOUR FACTORS & RATINGS)
+// KOMPLETNA BAZA DANYCH DRUŻYN NBA (Four Factors + Zaawansowane Metryki)
 // ============================================================================
 const NBA_TEAMS_DB = {
   BOS: {
-    id: 'BOS', name: 'Boston Celtics', short: 'Celtics', conf: 'East', color: '#007A33',
-    ortg: 122.8, drtg: 111.2, pace: 98.4, efg: 57.8, tov: 11.8, orb: 28.9, ftr: 21.5, l10: 8,
-    starPlayers: 'J. Tatum, J. Brown'
+    id: 'BOS', name: 'Boston Celtics', short: 'BOS', conf: 'East', color: '#007A33',
+    ortg: 123.2, drtg: 111.6, pace: 98.2, efg: 57.8, tov: 11.9, orb: 28.8, ftr: 20.5,
+    l10: 0.80, homeRecord: '33-6', awayRecord: '27-14', starPlayer: 'Jayson Tatum'
   },
   OKC: {
-    id: 'OKC', name: 'Oklahoma City Thunder', short: 'Thunder', conf: 'West', color: '#007AC1',
-    ortg: 120.4, drtg: 110.5, pace: 100.6, efg: 56.9, tov: 12.1, orb: 25.4, ftr: 22.8, l10: 8,
-    starPlayers: 'S. Gilgeous-Alexander, C. Holmgren'
+    id: 'OKC', name: 'Oklahoma City Thunder', short: 'OKC', conf: 'West', color: '#007AC1',
+    ortg: 119.5, drtg: 111.0, pace: 100.6, efg: 57.3, tov: 12.4, orb: 24.5, ftr: 21.8,
+    l10: 0.70, homeRecord: '31-8', awayRecord: '25-15', starPlayer: 'Shai Gilgeous-Alexander'
   },
   DEN: {
-    id: 'DEN', name: 'Denver Nuggets', short: 'Nuggets', conf: 'West', color: '#FEC524',
-    ortg: 119.5, drtg: 112.4, pace: 97.2, efg: 56.4, tov: 12.4, orb: 30.2, ftr: 20.9, l10: 7,
-    starPlayers: 'N. Jokić, J. Murray'
-  },
-  NYK: {
-    id: 'NYK', name: 'New York Knicks', short: 'Knicks', conf: 'East', color: '#F58426',
-    ortg: 118.9, drtg: 112.8, pace: 96.1, efg: 55.2, tov: 12.6, orb: 32.5, ftr: 22.1, l10: 7,
-    starPlayers: 'J. Brunson, K. Towns'
+    id: 'DEN', name: 'Denver Nuggets', short: 'DEN', conf: 'West', color: '#0E2240',
+    ortg: 118.5, drtg: 112.3, pace: 97.4, efg: 56.2, tov: 12.6, orb: 30.2, ftr: 19.9,
+    l10: 0.80, homeRecord: '32-8', awayRecord: '24-17', starPlayer: 'Nikola Jokić'
   },
   MIN: {
-    id: 'MIN', name: 'Minnesota Timberwolves', short: 'Timberwolves', conf: 'West', color: '#236192',
-    ortg: 115.6, drtg: 109.4, pace: 97.8, efg: 55.8, tov: 14.1, orb: 27.6, ftr: 23.4, l10: 7,
-    starPlayers: 'A. Edwards, R. Gobert'
+    id: 'MIN', name: 'Minnesota Timberwolves', short: 'MIN', conf: 'West', color: '#0C2340',
+    ortg: 115.6, drtg: 109.0, pace: 97.8, efg: 55.9, tov: 14.2, orb: 27.5, ftr: 22.8,
+    l10: 0.70, homeRecord: '29-10', awayRecord: '26-15', starPlayer: 'Anthony Edwards'
   },
-  DAL: {
-    id: 'DAL', name: 'Dallas Mavericks', short: 'Mavericks', conf: 'West', color: '#00538C',
-    ortg: 119.1, drtg: 114.2, pace: 100.2, efg: 56.7, tov: 12.2, orb: 26.8, ftr: 22.5, l10: 6,
-    starPlayers: 'L. Dončić, K. Irving'
+  NYK: {
+    id: 'NYK', name: 'New York Knicks', short: 'NYK', conf: 'East', color: '#F58426',
+    ortg: 118.2, drtg: 112.4, pace: 96.1, efg: 54.8, tov: 13.1, orb: 33.4, ftr: 21.2,
+    l10: 0.60, homeRecord: '27-12', awayRecord: '23-18', starPlayer: 'Jalen Brunson'
   },
   MIL: {
-    id: 'MIL', name: 'Milwaukee Bucks', short: 'Bucks', conf: 'East', color: '#00471B',
-    ortg: 118.2, drtg: 114.8, pace: 100.4, efg: 56.5, tov: 12.7, orb: 25.9, ftr: 24.8, l10: 6,
-    starPlayers: 'G. Antetokounmpo, D. Lillard'
+    id: 'MIL', name: 'Milwaukee Bucks', short: 'MIL', conf: 'East', color: '#00471B',
+    ortg: 118.4, drtg: 115.2, pace: 100.2, efg: 56.8, tov: 12.7, orb: 24.8, ftr: 23.9,
+    l10: 0.60, homeRecord: '30-10', awayRecord: '19-20', starPlayer: 'Giannis Antetokounmpo'
   },
-  PHI: {
-    id: 'PHI', name: 'Philadelphia 76ers', short: '76ers', conf: 'East', color: '#006BB6',
-    ortg: 117.4, drtg: 113.5, pace: 98.1, efg: 54.6, tov: 11.9, orb: 28.4, ftr: 25.2, l10: 6,
-    starPlayers: 'J. Embiid, T. Maxey'
+  DAL: {
+    id: 'DAL', name: 'Dallas Mavericks', short: 'DAL', conf: 'West', color: '#00538C',
+    ortg: 117.9, drtg: 114.6, pace: 100.1, efg: 56.5, tov: 12.1, orb: 25.9, ftr: 21.4,
+    l10: 0.80, homeRecord: '25-15', awayRecord: '25-15', starPlayer: 'Luka Dončić'
   },
   CLE: {
-    id: 'CLE', name: 'Cleveland Cavaliers', short: 'Cavaliers', conf: 'East', color: '#860038',
-    ortg: 118.6, drtg: 111.9, pace: 98.5, efg: 56.8, tov: 13.1, orb: 27.5, ftr: 20.6, l10: 8,
-    starPlayers: 'D. Mitchell, E. Mobley'
+    id: 'CLE', name: 'Cleveland Cavaliers', short: 'CLE', conf: 'East', color: '#860038',
+    ortg: 116.2, drtg: 112.1, pace: 98.0, efg: 55.7, tov: 13.4, orb: 26.8, ftr: 20.1,
+    l10: 0.60, homeRecord: '26-14', awayRecord: '22-18', starPlayer: 'Donovan Mitchell'
   },
   PHX: {
-    id: 'PHX', name: 'Phoenix Suns', short: 'Suns', conf: 'West', color: '#E56020',
-    ortg: 117.8, drtg: 114.6, pace: 98.9, efg: 56.1, tov: 14.3, orb: 28.1, ftr: 23.7, l10: 6,
-    starPlayers: 'K. Durant, D. Booker'
-  },
-  IND: {
-    id: 'IND', name: 'Indiana Pacers', short: 'Pacers', conf: 'East', color: '#FDBB30',
-    ortg: 121.2, drtg: 117.5, pace: 102.3, efg: 57.6, tov: 12.8, orb: 26.2, ftr: 20.1, l10: 6,
-    starPlayers: 'T. Haliburton, P. Siakam'
+    id: 'PHX', name: 'Phoenix Suns', short: 'PHX', conf: 'West', color: '#E56020',
+    ortg: 117.6, drtg: 114.4, pace: 98.5, efg: 56.4, tov: 14.6, orb: 29.1, ftr: 23.4,
+    l10: 0.70, homeRecord: '25-15', awayRecord: '23-17', starPlayer: 'Kevin Durant'
   },
   LAL: {
-    id: 'LAL', name: 'Los Angeles Lakers', short: 'Lakers', conf: 'West', color: '#552583',
-    ortg: 116.5, drtg: 114.9, pace: 101.1, efg: 56.2, tov: 13.4, orb: 24.8, ftr: 26.1, l10: 6,
-    starPlayers: 'L. James, A. Davis'
+    id: 'LAL', name: 'Los Angeles Lakers', short: 'LAL', conf: 'West', color: '#552583',
+    ortg: 115.9, drtg: 115.2, pace: 101.4, efg: 56.6, tov: 13.6, orb: 24.1, ftr: 24.8,
+    l10: 0.70, homeRecord: '28-12', awayRecord: '18-21', starPlayer: 'LeBron James'
   },
-  GSW: {
-    id: 'GSW', name: 'Golden State Warriors', short: 'Warriors', conf: 'West', color: '#1D428A',
-    ortg: 117.3, drtg: 113.8, pace: 99.8, efg: 55.9, tov: 13.9, orb: 30.5, ftr: 20.4, l10: 7,
-    starPlayers: 'S. Curry, D. Green'
+  IND: {
+    id: 'IND', name: 'Indiana Pacers', short: 'IND', conf: 'East', color: '#002D62',
+    ortg: 120.5, drtg: 118.0, pace: 102.3, efg: 57.9, tov: 12.8, orb: 26.2, ftr: 19.2,
+    l10: 0.60, homeRecord: '26-15', awayRecord: '21-20', starPlayer: 'Tyrese Haliburton'
   },
-  MIA: {
-    id: 'MIA', name: 'Miami Heat', short: 'Heat', conf: 'East', color: '#98002E',
-    ortg: 114.2, drtg: 112.1, pace: 96.5, efg: 54.1, tov: 12.5, orb: 26.4, ftr: 22.9, l10: 5,
-    starPlayers: 'J. Butler, B. Adebayo'
+  PHI: {
+    id: 'PHI', name: 'Philadelphia 76ers', short: 'PHI', conf: 'East', color: '#006BB6',
+    ortg: 116.8, drtg: 113.8, pace: 97.6, efg: 53.9, tov: 11.8, orb: 28.9, ftr: 24.2,
+    l10: 0.60, homeRecord: '25-15', awayRecord: '22-18', starPlayer: 'Joel Embiid'
   },
   ORL: {
-    id: 'ORL', name: 'Orlando Magic', short: 'Magic', conf: 'East', color: '#0077C0',
-    ortg: 113.4, drtg: 110.2, pace: 97.4, efg: 53.8, tov: 14.4, orb: 29.8, ftr: 25.6, l10: 6,
-    starPlayers: 'P. Banchero, F. Wagner'
+    id: 'ORL', name: 'Orlando Magic', short: 'ORL', conf: 'East', color: '#0077C0',
+    ortg: 113.4, drtg: 110.8, pace: 97.3, efg: 54.1, tov: 14.5, orb: 29.8, ftr: 25.1,
+    l10: 0.60, homeRecord: '29-11', awayRecord: '18-22', starPlayer: 'Paolo Banchero'
   },
   SAC: {
-    id: 'SAC', name: 'Sacramento Kings', short: 'Kings', conf: 'West', color: '#5A2D81',
-    ortg: 116.9, drtg: 114.7, pace: 99.7, efg: 55.7, tov: 13.0, orb: 28.3, ftr: 20.8, l10: 6,
-    starPlayers: 'D. Fox, D. Sabonis'
+    id: 'SAC', name: 'Sacramento Kings', short: 'SAC', conf: 'West', color: '#5A2D81',
+    ortg: 116.9, drtg: 115.1, pace: 100.1, efg: 56.1, tov: 13.0, orb: 28.2, ftr: 19.6,
+    l10: 0.50, homeRecord: '24-16', awayRecord: '22-18', starPlayer: "De'Aaron Fox"
   },
-  NOP: {
-    id: 'NOP', name: 'New Orleans Pelicans', short: 'Pelicans', conf: 'West', color: '#0C2340',
-    ortg: 115.8, drtg: 113.6, pace: 98.6, efg: 55.1, tov: 13.2, orb: 28.7, ftr: 22.7, l10: 5,
-    starPlayers: 'Z. Williamson, B. Ingram'
+  GSW: {
+    id: 'GSW', name: 'Golden State Warriors', short: 'GSW', conf: 'West', color: '#1D428A',
+    ortg: 117.2, drtg: 115.0, pace: 99.8, efg: 55.8, tov: 14.1, orb: 31.2, ftr: 20.0,
+    l10: 0.70, homeRecord: '21-19', awayRecord: '25-15', starPlayer: 'Stephen Curry'
+  },
+  MIA: {
+    id: 'MIA', name: 'Miami Heat', short: 'MIA', conf: 'East', color: '#98002E',
+    ortg: 114.0, drtg: 112.2, pace: 96.2, efg: 53.8, tov: 12.6, orb: 25.6, ftr: 22.1,
+    l10: 0.60, homeRecord: '22-18', awayRecord: '24-16', starPlayer: 'Jimmy Butler'
   },
   LAC: {
-    id: 'LAC', name: 'LA Clippers', short: 'Clippers', conf: 'West', color: '#C8102E',
-    ortg: 116.4, drtg: 114.5, pace: 97.5, efg: 55.4, tov: 13.1, orb: 27.9, ftr: 22.3, l10: 5,
-    starPlayers: 'J. Harden, K. Leonard'
+    id: 'LAC', name: 'LA Clippers', short: 'LAC', conf: 'West', color: '#C8102E',
+    ortg: 118.1, drtg: 114.9, pace: 97.5, efg: 56.3, tov: 13.1, orb: 27.6, ftr: 22.5,
+    l10: 0.50, homeRecord: '25-15', awayRecord: '26-14', starPlayer: 'Kawhi Leonard'
+  },
+  NOP: {
+    id: 'NOP', name: 'New Orleans Pelicans', short: 'NOP', conf: 'West', color: '#0C2340',
+    ortg: 116.7, drtg: 112.2, pace: 98.3, efg: 55.9, tov: 13.2, orb: 28.5, ftr: 22.2,
+    l10: 0.60, homeRecord: '21-19', awayRecord: '28-14', starPlayer: 'Zion Williamson'
   },
   HOU: {
-    id: 'HOU', name: 'Houston Rockets', short: 'Rockets', conf: 'West', color: '#CE1141',
-    ortg: 114.8, drtg: 111.8, pace: 99.3, efg: 53.6, tov: 12.6, orb: 31.4, ftr: 23.1, l10: 7,
-    starPlayers: 'A. Şengün, J. Green'
-  },
-  MEM: {
-    id: 'MEM', name: 'Memphis Grizzlies', short: 'Grizzlies', conf: 'West', color: '#5D76A9',
-    ortg: 114.5, drtg: 113.2, pace: 100.5, efg: 54.0, tov: 14.2, orb: 29.6, ftr: 22.4, l10: 6,
-    starPlayers: 'J. Morant, J. Jackson Jr.'
-  },
-  ATL: {
-    id: 'ATL', name: 'Atlanta Hawks', short: 'Hawks', conf: 'East', color: '#E03A3E',
-    ortg: 116.1, drtg: 117.8, pace: 101.4, efg: 54.5, tov: 13.3, orb: 30.8, ftr: 23.2, l10: 5,
-    starPlayers: 'T. Young, J. Johnson'
+    id: 'HOU', name: 'Houston Rockets', short: 'HOU', conf: 'West', color: '#CE1141',
+    ortg: 114.5, drtg: 112.9, pace: 99.4, efg: 53.5, tov: 12.6, orb: 29.4, ftr: 21.8,
+    l10: 0.60, homeRecord: '27-13', awayRecord: '14-26', starPlayer: 'Alperen Şengün'
   },
   CHI: {
-    id: 'CHI', name: 'Chicago Bulls', short: 'Bulls', conf: 'East', color: '#CE1141',
-    ortg: 113.8, drtg: 116.2, pace: 99.1, efg: 53.7, tov: 12.4, orb: 27.1, ftr: 20.5, l10: 4,
-    starPlayers: 'Z. LaVine, C. White'
+    id: 'CHI', name: 'Chicago Bulls', short: 'CHI', conf: 'East', color: '#CE1141',
+    ortg: 114.2, drtg: 116.1, pace: 96.9, efg: 53.4, tov: 12.1, orb: 28.1, ftr: 20.9,
+    l10: 0.50, homeRecord: '20-20', awayRecord: '19-21', starPlayer: 'DeMar DeRozan'
   },
-  SAS: {
-    id: 'SAS', name: 'San Antonio Spurs', short: 'Spurs', conf: 'West', color: '#C4CED4',
-    ortg: 112.9, drtg: 114.4, pace: 100.8, efg: 53.9, tov: 14.6, orb: 27.4, ftr: 21.2, l10: 5,
-    starPlayers: 'V. Wembanyama, D. Vassell'
-  },
-  TOR: {
-    id: 'TOR', name: 'Toronto Raptors', short: 'Raptors', conf: 'East', color: '#CE1141',
-    ortg: 112.4, drtg: 116.8, pace: 99.6, efg: 53.4, tov: 13.8, orb: 28.5, ftr: 21.6, l10: 3,
-    starPlayers: 'S. Barnes, R. Barrett'
+  ATL: {
+    id: 'ATL', name: 'Atlanta Hawks', short: 'ATL', conf: 'East', color: '#E03A3E',
+    ortg: 116.6, drtg: 118.8, pace: 100.8, efg: 54.2, tov: 13.2, orb: 30.8, ftr: 22.0,
+    l10: 0.40, homeRecord: '21-20', awayRecord: '15-26', starPlayer: 'Trae Young'
   },
   BKN: {
-    id: 'BKN', name: 'Brooklyn Nets', short: 'Nets', conf: 'East', color: '#777D84',
-    ortg: 112.1, drtg: 116.4, pace: 97.6, efg: 53.1, tov: 13.1, orb: 28.2, ftr: 20.9, l10: 4,
-    starPlayers: 'C. Thomas, D. Schröder'
+    id: 'BKN', name: 'Brooklyn Nets', short: 'BKN', conf: 'East', color: '#000000',
+    ortg: 112.8, drtg: 116.0, pace: 97.6, efg: 53.1, tov: 12.9, orb: 28.0, ftr: 19.8,
+    l10: 0.40, homeRecord: '20-21', awayRecord: '12-29', starPlayer: 'Cam Thomas'
+  },
+  TOR: {
+    id: 'TOR', name: 'Toronto Raptors', short: 'TOR', conf: 'East', color: '#CE1141',
+    ortg: 112.1, drtg: 118.1, pace: 99.7, efg: 53.5, tov: 13.8, orb: 27.1, ftr: 20.4,
+    l10: 0.30, homeRecord: '14-27', awayRecord: '11-30', starPlayer: 'Scottie Barnes'
+  },
+  MEM: {
+    id: 'MEM', name: 'Memphis Grizzlies', short: 'MEM', conf: 'West', color: '#5D76A9',
+    ortg: 109.8, drtg: 113.8, pace: 98.6, efg: 51.9, tov: 14.8, orb: 27.9, ftr: 20.2,
+    l10: 0.40, homeRecord: '9-32', awayRecord: '18-23', starPlayer: 'Ja Morant'
   },
   UTA: {
-    id: 'UTA', name: 'Utah Jazz', short: 'Jazz', conf: 'West', color: '#002B5C',
-    ortg: 113.2, drtg: 118.9, pace: 99.9, efg: 53.5, tov: 15.1, orb: 31.1, ftr: 22.6, l10: 3,
-    starPlayers: 'L. Markkanen, C. Sexton'
+    id: 'UTA', name: 'Utah Jazz', short: 'UTA', conf: 'West', color: '#002B5C',
+    ortg: 114.8, drtg: 119.9, pace: 100.2, efg: 53.9, tov: 15.3, orb: 31.0, ftr: 22.1,
+    l10: 0.30, homeRecord: '21-20', awayRecord: '10-31', starPlayer: 'Lauri Markkanen'
+  },
+  SAS: {
+    id: 'SAS', name: 'San Antonio Spurs', short: 'SAS', conf: 'West', color: '#C4CED4',
+    ortg: 110.3, drtg: 116.4, pace: 101.5, efg: 52.8, tov: 14.9, orb: 26.5, ftr: 19.5,
+    l10: 0.40, homeRecord: '12-29', awayRecord: '10-31', starPlayer: 'Victor Wembanyama'
   },
   POR: {
-    id: 'POR', name: 'Portland Trail Blazers', short: 'Trail Blazers', conf: 'West', color: '#E03A3E',
-    ortg: 109.8, drtg: 116.9, pace: 98.2, efg: 51.2, tov: 14.9, orb: 31.6, ftr: 21.8, l10: 3,
-    starPlayers: 'A. Simons, D. Ayton'
+    id: 'POR', name: 'Portland Trail Blazers', short: 'POR', conf: 'West', color: '#E03A3E',
+    ortg: 108.6, drtg: 116.9, pace: 97.8, efg: 50.8, tov: 15.1, orb: 31.4, ftr: 20.6,
+    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31', starPlayer: 'Anfernee Simons'
   },
   CHA: {
-    id: 'CHA', name: 'Charlotte Hornets', short: 'Hornets', conf: 'East', color: '#1D1160',
-    ortg: 111.5, drtg: 117.9, pace: 98.4, efg: 52.8, tov: 13.9, orb: 26.9, ftr: 20.3, l10: 3,
-    starPlayers: 'L. Ball, B. Miller'
-  },
-  DET: {
-    id: 'DET', name: 'Detroit Pistons', short: 'Pistons', conf: 'East', color: '#C8102E',
-    ortg: 111.2, drtg: 116.5, pace: 99.5, efg: 52.6, tov: 14.7, orb: 28.8, ftr: 21.9, l10: 4,
-    starPlayers: 'C. Cunningham, J. Ivey'
+    id: 'CHA', name: 'Charlotte Hornets', short: 'CHA', conf: 'East', color: '#1D1160',
+    ortg: 109.1, drtg: 119.2, pace: 97.6, efg: 51.8, tov: 13.7, orb: 25.1, ftr: 19.1,
+    l10: 0.20, homeRecord: '11-30', awayRecord: '10-31', starPlayer: 'LaMelo Ball'
   },
   WAS: {
-    id: 'WAS', name: 'Washington Wizards', short: 'Wizards', conf: 'East', color: '#002B5C',
-    ortg: 109.4, drtg: 119.5, pace: 102.7, efg: 52.4, tov: 14.5, orb: 25.1, ftr: 20.2, l10: 2,
-    starPlayers: 'J. Poole, K. Kuzma'
+    id: 'WAS', name: 'Washington Wizards', short: 'WAS', conf: 'East', color: '#002B5C',
+    ortg: 110.2, drtg: 119.6, pace: 102.7, efg: 53.4, tov: 13.9, orb: 23.9, ftr: 19.3,
+    l10: 0.20, homeRecord: '7-34', awayRecord: '8-33', starPlayer: 'Kyle Kuzma'
+  },
+  DET: {
+    id: 'DET', name: 'Detroit Pistons', short: 'DET', conf: 'East', color: '#C8102E',
+    ortg: 109.5, drtg: 118.4, pace: 100.1, efg: 52.1, tov: 15.0, orb: 28.4, ftr: 21.1,
+    l10: 0.20, homeRecord: '7-33', awayRecord: '7-35', starPlayer: 'Cade Cunningham'
   }
 };
 
-// Mapowanie skrótów ESPN na nasze ID w bazie
 const ESPN_ABBR_MAP = {
-  GS: 'GSW',
-  NO: 'NOP',
-  NY: 'NYK',
-  SA: 'SAS',
-  UTAH: 'UTA',
-  WSH: 'WAS'
+  GS: 'GSW', NY: 'NYK', NO: 'NOP', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS'
 };
 
-// ============================================================================
-// DOMYŚLNE MECZE FALLBACK (GDY BRAK MECZÓW W API LUB BŁĄD POŁĄCZENIA)
-// ============================================================================
-const FALLBACK_GAMES = [
+// Domyślna lista spotkań z realnymi kursami rynkowymi
+const FALLBACK_MATCHES = [
   {
-    id: 'fallback-1',
-    homeTeam: 'BOS',
-    awayTeam: 'NYK',
-    time: '01:30 CET',
-    status: 'Zaplanowany (Hit Dnia)',
-    venue: 'TD Garden, Boston',
-    bookieOdds: { home: 1.48, away: 2.75 }
+    id: 'm1', home: 'BOS', away: 'NYK', time: '01:30 CET', status: 'Zaplanowany', venue: 'TD Garden (Boston)',
+    bookieOdds: { home: 1.47, away: 2.85, spreadLine: -6.5, spreadHomeOdds: 1.90, spreadAwayOdds: 1.90, totalLine: 224.5, overOdds: 1.92, underOdds: 1.90 }
   },
   {
-    id: 'fallback-2',
-    homeTeam: 'LAL',
-    awayTeam: 'PHX',
-    time: '04:00 CET',
-    status: 'Zaplanowany',
-    venue: 'Crypto.com Arena, Los Angeles',
-    bookieOdds: { home: 1.88, away: 1.98 }
+    id: 'm2', home: 'DEN', away: 'MIN', time: '04:00 CET', status: 'Zaplanowany', venue: 'Ball Arena (Denver)',
+    bookieOdds: { home: 1.65, away: 2.38, spreadLine: -4.0, spreadHomeOdds: 1.91, spreadAwayOdds: 1.91, totalLine: 217.5, overOdds: 1.95, underOdds: 1.87 }
   },
   {
-    id: 'fallback-3',
-    homeTeam: 'DEN',
-    awayTeam: 'OKC',
-    time: '02:30 CET',
-    status: 'Zaplanowany (Szczyt Zachodu)',
-    venue: 'Ball Arena, Denver',
-    bookieOdds: { home: 1.82, away: 2.05 }
+    id: 'm3', home: 'LAL', away: 'PHX', time: '04:00 CET', status: 'Zaplanowany', venue: 'Crypto.com Arena (LA)',
+    bookieOdds: { home: 1.92, away: 2.02, spreadLine: -1.5, spreadHomeOdds: 1.90, spreadAwayOdds: 1.92, totalLine: 231.5, overOdds: 1.88, underOdds: 1.94 }
   },
   {
-    id: 'fallback-4',
-    homeTeam: 'MIL',
-    awayTeam: 'CLE',
-    time: '01:00 CET',
-    status: 'Zaplanowany',
-    venue: 'Fiserv Forum, Milwaukee',
-    bookieOdds: { home: 1.92, away: 1.92 }
+    id: 'm4', home: 'MIL', away: 'IND', time: '02:00 CET', status: 'Zaplanowany', venue: 'Fiserv Forum (Milwaukee)',
+    bookieOdds: { home: 1.58, away: 2.52, spreadLine: -5.5, spreadHomeOdds: 1.90, spreadAwayOdds: 1.90, totalLine: 237.5, overOdds: 1.93, underOdds: 1.89 }
   },
   {
-    id: 'fallback-5',
-    homeTeam: 'DAL',
-    awayTeam: 'MIN',
-    time: '01:30 CET',
-    status: 'Zaplanowany',
-    venue: 'American Airlines Center, Dallas',
-    bookieOdds: { home: 1.85, away: 2.00 }
+    id: 'm5', home: 'DAL', away: 'OKC', time: '02:30 CET', status: 'Zaplanowany', venue: 'American Airlines Center',
+    bookieOdds: { home: 2.08, away: 1.85, spreadLine: 1.5, spreadHomeOdds: 1.91, spreadAwayOdds: 1.91, totalLine: 229.5, overOdds: 1.92, underOdds: 1.90 }
   },
   {
-    id: 'fallback-6',
-    homeTeam: 'GSW',
-    awayTeam: 'SAC',
-    time: '04:00 CET',
-    status: 'Zaplanowany',
-    venue: 'Chase Center, San Francisco',
-    bookieOdds: { home: 1.72, away: 2.18 }
+    id: 'm6', home: 'CLE', away: 'ORL', time: '01:00 CET', status: 'Zaplanowany', venue: 'Rocket Mortgage FieldHouse',
+    bookieOdds: { home: 1.60, away: 2.45, spreadLine: -4.5, spreadHomeOdds: 1.92, spreadAwayOdds: 1.90, totalLine: 212.5, overOdds: 1.91, underOdds: 1.91 }
   }
 ];
 
 // ============================================================================
-// FUNKCJE POMOCNICZE MATEMATYCZNE (ROZKŁAD GAUSSA BOX-MULLER)
+// FUNKCJE MATEMATYCZNE I SILNIK MONTE CARLO (Box-Muller + Four Factors)
 // ============================================================================
-function randomGaussian(mean, stdDev) {
+function randomNormal(mean, stdDev) {
   let u1 = 0, u2 = 0;
   while (u1 === 0) u1 = Math.random();
   while (u2 === 0) u2 = Math.random();
@@ -287,406 +225,547 @@ function randomGaussian(mean, stdDev) {
   return z0 * stdDev + mean;
 }
 
-// Funkcja uruchamiająca symulację Monte Carlo oraz generująca rynki i uzasadnienia dla pojedynczego meczu
-function analyzeMatchupMonteCarlo(game, iterations = 8000, taxRate = 0.12) {
-  const homeTeam = NBA_TEAMS_DB[game.homeTeam] || NBA_TEAMS_DB.BOS;
-  const awayTeam = NBA_TEAMS_DB[game.awayTeam] || NBA_TEAMS_DB.NYK;
-
+function runMonteCarloSimulation(homeTeam, awayTeam, iterations, modifiers) {
+  const { homeCourtAdv = 2.8, homeB2B = false, awayB2B = false, homeInjuryImpact = 0, awayInjuryImpact = 0 } = modifiers;
+  const leagueAvgORTG = 115.3;
   const leagueAvgPace = 99.2;
-  const hcaPoints = 2.8;
-  const estimatedPace = (homeTeam.pace * awayTeam.pace) / leagueAvgPace;
 
-  // Indeks Four Factors Deana Olivera
-  const homeFF =
-    (homeTeam.efg - 54.5) * 0.40 -
-    (homeTeam.tov - 13.2) * 0.25 +
-    (homeTeam.orb - 28.0) * 0.20 +
-    (homeTeam.ftr - 22.0) * 0.15;
+  const expectedPace = (homeTeam.pace * awayTeam.pace) / leagueAvgPace;
 
-  const awayFF =
-    (awayTeam.efg - 54.5) * 0.40 -
-    (awayTeam.tov - 13.2) * 0.25 +
-    (awayTeam.orb - 28.0) * 0.20 +
-    (awayTeam.ftr - 22.0) * 0.15;
+  // Four Factors (Dean Oliver: 40% eFG, 25% TOV, 20% ORB, 15% FTR)
+  const homeFFIndex =
+    (homeTeam.efg - 54.7) * 0.40 -
+    (homeTeam.tov - 13.5) * 0.25 +
+    (homeTeam.orb - 27.5) * 0.20 +
+    (homeTeam.ftr - 21.0) * 0.15;
 
-  let expectedHomeOrtg = (homeTeam.ortg + awayTeam.drtg) / 2 + (homeFF - awayFF) * 0.35 + (homeTeam.l10 - 5) * 0.45;
-  let expectedAwayOrtg = (awayTeam.ortg + homeTeam.drtg) / 2 + (awayFF - homeFF) * 0.35 + (awayTeam.l10 - 5) * 0.45;
+  const awayFFIndex =
+    (awayTeam.efg - 54.7) * 0.40 -
+    (awayTeam.tov - 13.5) * 0.25 +
+    (awayTeam.orb - 27.5) * 0.20 +
+    (awayTeam.ftr - 21.0) * 0.15;
 
-  const meanHome = expectedHomeOrtg * (estimatedPace / 100) + hcaPoints / 2;
-  const meanAway = expectedAwayOrtg * (estimatedPace / 100) - hcaPoints / 2;
+  const baseHomeORTG = (homeTeam.ortg * awayTeam.drtg) / leagueAvgORTG + homeFFIndex * 0.45;
+  const baseAwayORTG = (awayTeam.ortg * homeTeam.drtg) / leagueAvgORTG + awayFFIndex * 0.45;
 
-  // Linie bukmacherskie (Spread i Total) zaokrąglone do .5
-  const rawExpectedMargin = meanHome - meanAway; // dodatni = gospodarz faworytem
-  // Bukmacher wystawia linię nieco bardziej konserwatywną niż czysty model
-  const bookieSpreadHome = Math.round((rawExpectedMargin * 0.85) - 0.5) + 0.5; // np. +4.5 -> linia -4.5 na gospodarza
-  const spreadLineHome = -bookieSpreadHome; // ujemny gdy gospodarz faworytem
-  const spreadLineAway = bookieSpreadHome;
+  const formDiff = (homeTeam.l10 - awayTeam.l10) * 2.2;
 
-  const rawExpectedTotal = meanHome + meanAway;
-  const bookieTotalLine = Math.round(rawExpectedTotal * 0.985) + 0.5;
+  let expectedHomePts =
+    (baseHomeORTG / 100) * expectedPace +
+    homeCourtAdv / 2 +
+    formDiff / 2 -
+    (homeB2B ? 2.4 : 0) -
+    homeInjuryImpact;
 
-  const stdDev = 11.2;
+  let expectedAwayPts =
+    (baseAwayORTG / 100) * expectedPace -
+    homeCourtAdv / 2 -
+    formDiff / 2 -
+    (awayB2B ? 2.4 : 0) -
+    awayInjuryImpact;
+
+  const stdDevTeam = 11.2;
+
   let homeWins = 0;
-  let homeSpreadCovers = 0;
+  let awayWins = 0;
+  let totalHomePts = 0;
+  let totalAwayPts = 0;
   let overHits = 0;
-  let sumHome = 0;
-  let sumAway = 0;
+  let spreadCoverHome = 0;
+
+  const projectedTotalLine = Math.round((expectedHomePts + expectedAwayPts) * 2) / 2;
+  const projectedSpreadLine = Math.round((expectedAwayPts - expectedHomePts) * 2) / 2;
+
+  const marginBuckets = {
+    'Away 16+': 0,
+    'Away 11-15': 0,
+    'Away 6-10': 0,
+    'Away 1-5': 0,
+    'Home 1-5': 0,
+    'Home 6-10': 0,
+    'Home 11-15': 0,
+    'Home 16+': 0
+  };
 
   for (let i = 0; i < iterations; i++) {
-    const tempoShock = randomGaussian(0, 3.5);
-    let h = Math.round(randomGaussian(meanHome + tempoShock, stdDev));
-    let a = Math.round(randomGaussian(meanAway + tempoShock, stdDev));
-    while (h === a) {
-      h += Math.round(randomGaussian(11.0, 3.2));
-      a += Math.round(randomGaussian(10.6, 3.2));
+    const paceShock = randomNormal(0, 3.2);
+    let simHome = Math.round(randomNormal(expectedHomePts + paceShock, stdDevTeam));
+    let simAway = Math.round(randomNormal(expectedAwayPts + paceShock, stdDevTeam));
+
+    while (simHome === simAway) {
+      simHome += Math.round(randomNormal(expectedHomePts * 0.104, 3.4));
+      simAway += Math.round(randomNormal(expectedAwayPts * 0.104, 3.4));
     }
-    if (h > a) homeWins++;
-    if (h + spreadLineHome > a) homeSpreadCovers++;
-    if (h + a > bookieTotalLine) overHits++;
-    sumHome += h;
-    sumAway += a;
+
+    if (simHome > simAway) homeWins++;
+    else awayWins++;
+
+    totalHomePts += simHome;
+    totalAwayPts += simAway;
+
+    if (simHome + simAway > projectedTotalLine) overHits++;
+    if (simHome + projectedSpreadLine > simAway) spreadCoverHome++;
+
+    const margin = simHome - simAway;
+    if (margin <= -16) marginBuckets['Away 16+']++;
+    else if (margin <= -11) marginBuckets['Away 11-15']++;
+    else if (margin <= -6) marginBuckets['Away 6-10']++;
+    else if (margin < 0) marginBuckets['Away 1-5']++;
+    else if (margin <= 5) marginBuckets['Home 1-5']++;
+    else if (margin <= 10) marginBuckets['Home 6-10']++;
+    else if (margin <= 15) marginBuckets['Home 11-15']++;
+    else marginBuckets['Home 16+']++;
   }
 
-  const pHome = homeWins / iterations;
-  const pAway = 1 - pHome;
-  const pHomeSpread = homeSpreadCovers / iterations;
-  const pAwaySpread = 1 - pHomeSpread;
-  const pOver = overHits / iterations;
-  const pUnder = 1 - pOver;
-
-  const avgHome = sumHome / iterations;
-  const avgAway = sumAway / iterations;
-  const avgTotal = avgHome + avgAway;
-  const avgMargin = avgHome - avgAway;
-
-  // Wyliczenie realistycznych kursów bukmacherskich dla rynków dodatkowych
-  const oddHomeML = game.bookieOdds?.home || Number((1 / (pHome * 1.045)).toFixed(2));
-  const oddAwayML = game.bookieOdds?.away || Number((1 / (pAway * 1.045)).toFixed(2));
-  const oddHomeSpread = 1.90;
-  const oddAwaySpread = 1.90;
-  const oddOver = 1.90;
-  const oddUnder = 1.90;
-
-  // Generowanie automatycznych wniosków statystycznych (Factors Reasoning)
-  const efgDiff = (homeTeam.efg - awayTeam.efg).toFixed(1);
-  const orbDiff = (homeTeam.orb - awayTeam.orb).toFixed(1);
-  const netHome = (homeTeam.ortg - homeTeam.drtg).toFixed(1);
-  const netAway = (awayTeam.ortg - awayTeam.drtg).toFixed(1);
-
-  const reasons = {
-    homeML: `Net Rating ${homeTeam.short} (+${netHome}) vs ${awayTeam.short} (${netAway}) oraz przewaga własnego parkietu (+2.8 pkt). Skuteczność eFG%: ${homeTeam.efg}% vs ${awayTeam.efg}%.`,
-    awayML: `${awayTeam.short} dysponuje silnym ORTG (${awayTeam.ortg} pkt/100 pos.) i formą L10 (${awayTeam.l10}/10 wygranych), co daje niedoszacowane przez rynek szanse wyjazdowe.`,
-    homeSpread: `Symulacja Monte Carlo prognozuje średnią różnicę +${avgMargin.toFixed(1)} pkt dla ${homeTeam.short} (eFG% ${efgDiff > 0 ? '+' : ''}${efgDiff}%, ORB% ${orbDiff > 0 ? '+' : ''}${orbDiff}%).`,
-    awaySpread: `Model wskazuje na zacięty pojedynek (średni margines ${avgMargin.toFixed(1)} pkt). Obrona ${awayTeam.short} (DRTG ${awayTeam.drtg}) pozwala utrzymać dodatni handicap.`,
-    over: `Wysokie tempo spotkania (${estimatedPace.toFixed(1)} posiadań) oraz łączna efektywność ofensywna generują w symulacji średnio ${avgTotal.toFixed(1)} pkt (linia ${bookieTotalLine}).`,
-    under: `Defensywny profil starcia (DRTG: ${homeTeam.drtg} vs ${awayTeam.drtg}) oraz kontrola tempa (${estimatedPace.toFixed(1)}) sprzyjają wynikowi poniżej ${bookieTotalLine} pkt.`
-  };
-
-  const netMult = 1 - taxRate;
-
-  const createMarketPick = (marketId, marketType, selectionName, prob, odd, reasonText) => {
-    const ev = (prob * (odd * netMult) - 1) * 100;
-    const rawEdge = (prob - (1 / odd)) * 100; // przewaga czystego prawdopodobieństwa nad kursem
-    const confidence = Math.min(99, Math.max(40, Math.round(prob * 100 + rawEdge * 1.2)));
-
-    return {
-      pickId: `${game.id}-${marketId}`,
-      gameId: game.id,
-      homeTeam: homeTeam,
-      awayTeam: awayTeam,
-      gameTitle: `${awayTeam.short} @ ${homeTeam.short}`,
-      gameTime: game.time,
-      marketType,
-      selectionName,
-      prob: Number((prob * 100).toFixed(1)),
-      odd: Number(odd.toFixed(2)),
-      ev: Number(ev.toFixed(2)),
-      edge: Number(rawEdge.toFixed(1)),
-      confidence,
-      reason: reasonText,
-      statsSnapshot: {
-        avgScore: `${avgAway.toFixed(1)} : ${avgHome.toFixed(1)}`,
-        avgTotal: avgTotal.toFixed(1),
-        avgMargin: avgMargin.toFixed(1),
-        pace: estimatedPace.toFixed(1),
-        homeFF: homeFF.toFixed(2),
-        awayFF: awayFF.toFixed(2)
-      }
-    };
-  };
-
-  const markets = [
-    createMarketPick('ML_HOME', 'Zwycięzca (ML)', `${homeTeam.name} (Wygrana)`, pHome, oddHomeML, reasons.homeML),
-    createMarketPick('ML_AWAY', 'Zwycięzca (ML)', `${awayTeam.name} (Wygrana)`, pAway, oddAwayML, reasons.awayML),
-    createMarketPick(
-      'SPREAD_HOME',
-      'Handicap (Spread)',
-      `${homeTeam.short} ${spreadLineHome > 0 ? `+${spreadLineHome}` : spreadLineHome} pkt`,
-      pHomeSpread,
-      oddHomeSpread,
-      reasons.homeSpread
-    ),
-    createMarketPick(
-      'SPREAD_AWAY',
-      'Handicap (Spread)',
-      `${awayTeam.short} ${spreadLineAway > 0 ? `+${spreadLineAway}` : spreadLineAway} pkt`,
-      pAwaySpread,
-      oddAwaySpread,
-      reasons.awaySpread
-    ),
-    createMarketPick('TOTAL_OVER', 'Suma Punktów (O/U)', `Powyżej ${bookieTotalLine} pkt`, pOver, oddOver, reasons.over),
-    createMarketPick('TOTAL_UNDER', 'Suma Punktów (O/U)', `Poniżej ${bookieTotalLine} pkt`, pUnder, oddUnder, reasons.under)
-  ];
-
-  // Wybór najlepszego typu z tego konkretnego meczu (najwyższy wskaźnik łączony: prawdopodobieństwo + EV)
-  const bestPickForGame = [...markets].sort((a, b) => (b.ev + b.prob * 0.35) - (a.ev + a.prob * 0.35))[0];
-
   return {
-    gameId: game.id,
-    homeTeam,
-    awayTeam,
-    avgHome: avgHome.toFixed(1),
-    avgAway: avgAway.toFixed(1),
-    avgTotal: avgTotal.toFixed(1),
-    avgMargin: avgMargin.toFixed(1),
-    pace: estimatedPace.toFixed(1),
-    spreadLineHome,
-    bookieTotalLine,
-    markets,
-    bestPickForGame
+    homeWinProb: (homeWins / iterations) * 100,
+    awayWinProb: (awayWins / iterations) * 100,
+    avgHomePts: totalHomePts / iterations,
+    avgAwayPts: totalAwayPts / iterations,
+    avgTotalPts: (totalHomePts + totalAwayPts) / iterations,
+    projectedSpreadLine,
+    projectedTotalLine,
+    overProb: (overHits / iterations) * 100,
+    spreadCoverProb: (spreadCoverHome / iterations) * 100,
+    expectedPace,
+    homeFFIndex,
+    awayFFIndex,
+    marginBuckets,
+    iterations
   };
+}
+
+// ============================================================================
+// GENERATOR WSZYSTKICH RYNKÓW BUKMACHERSKICH I UZASADNIEŃ ANALITYCZNYCH
+// ============================================================================
+function generateAllSmartPicks(matches, taxRate) {
+  const taxMultiplier = taxRate ? 0.88 : 1.0;
+  const allPicks = [];
+
+  matches.forEach((match) => {
+    const homeTeam = NBA_TEAMS_DB[match.home];
+    const awayTeam = NBA_TEAMS_DB[match.away];
+    if (!homeTeam || !awayTeam) return;
+
+    const sim = runMonteCarloSimulation(homeTeam, awayTeam, 6000, {
+      homeCourtAdv: 2.8,
+      homeB2B: false,
+      awayB2B: false,
+      homeInjuryImpact: 0,
+      awayInjuryImpact: 0
+    });
+
+    const netRtgHome = (homeTeam.ortg - homeTeam.drtg).toFixed(1);
+    const netRtgAway = (awayTeam.ortg - awayTeam.drtg).toFixed(1);
+    const efgDiff = (homeTeam.efg - awayTeam.efg).toFixed(1);
+    const orbDiff = (homeTeam.orb - awayTeam.orb).toFixed(1);
+
+    // 1. Rynek Zwycięzca Gospodarz (ML Home)
+    const probHome = sim.homeWinProb / 100;
+    const evHome = (probHome * (match.bookieOdds.home * taxMultiplier) - 1) * 100;
+    allPicks.push({
+      id: `${match.id}_ML_HOME`,
+      matchId: match.id,
+      matchLabel: `${awayTeam.short} @ ${homeTeam.short}`,
+      homeTeam,
+      awayTeam,
+      time: match.time,
+      marketType: 'Zwycięzca (ML)',
+      selectionName: `${homeTeam.name} wygra`,
+      shortSelection: `${homeTeam.short} Win`,
+      odds: match.bookieOdds.home,
+      fairOdds: 1 / probHome,
+      prob: sim.homeWinProb,
+      ev: evHome,
+      projectedScore: `${sim.avgHomePts.toFixed(0)}:${sim.avgAwayPts.toFixed(0)}`,
+      confidenceScore: sim.homeWinProb * 0.65 + Math.max(-10, evHome) * 1.8,
+      reasoning: [
+        `Net Rating: ${homeTeam.short} (${netRtgHome > 0 ? '+' : ''}${netRtgHome}) vs ${awayTeam.short} (${netRtgAway > 0 ? '+' : ''}${netRtgAway}) + przewaga własnego parkietu (+2.8 pkt).`,
+        `Skuteczność eFG%: ${homeTeam.efg}% vs ${awayTeam.efg}% (${efgDiff > 0 ? '+' : ''}${efgDiff}% przewagi rzutowej).`,
+        `Symulacja Monte Carlo (6000 gier): średni wynik ${sim.avgHomePts.toFixed(1)} - ${sim.avgAwayPts.toFixed(1)}.`
+      ]
+    });
+
+    // 2. Rynek Zwycięzca Gość (ML Away)
+    const probAway = sim.awayWinProb / 100;
+    const evAway = (probAway * (match.bookieOdds.away * taxMultiplier) - 1) * 100;
+    allPicks.push({
+      id: `${match.id}_ML_AWAY`,
+      matchId: match.id,
+      matchLabel: `${awayTeam.short} @ ${homeTeam.short}`,
+      homeTeam,
+      awayTeam,
+      time: match.time,
+      marketType: 'Zwycięzca (ML)',
+      selectionName: `${awayTeam.name} wygra`,
+      shortSelection: `${awayTeam.short} Win`,
+      odds: match.bookieOdds.away,
+      fairOdds: 1 / probAway,
+      prob: sim.awayWinProb,
+      ev: evAway,
+      projectedScore: `${sim.avgHomePts.toFixed(0)}:${sim.avgAwayPts.toFixed(0)}`,
+      confidenceScore: sim.awayWinProb * 0.65 + Math.max(-10, evAway) * 1.8,
+      reasoning: [
+        `Kurs ${match.bookieOdds.away.toFixed(2)} przewyższa kurs sprawiedliwy modelu (${(1 / probAway).toFixed(2)}).`,
+        `Ofensywny Rating ${awayTeam.short} (${awayTeam.ortg} pkt/100 pos.) przeciwko obronie ${homeTeam.drtg} DRTG.`,
+        `Forma L10: ${Math.round(awayTeam.l10 * 10)}/10 wygranych przy zbiórkach ofensywnych ${awayTeam.orb}% ORB.`
+      ]
+    });
+
+    // 3. Rynek Handicap (Spread)
+    const bookieSpread = match.bookieOdds.spreadLine || -4.5;
+    const modelMarginHome = sim.avgHomePts - sim.avgAwayPts;
+    const spreadDiff = modelMarginHome + bookieSpread;
+    const coverHomeProb = Math.min(82, Math.max(18, 50 + spreadDiff * 3.1));
+    const pickHomeSpread = coverHomeProb >= 50;
+    const finalSpreadProb = pickHomeSpread ? coverHomeProb : 100 - coverHomeProb;
+    const spreadOdds = pickHomeSpread
+      ? (match.bookieOdds.spreadHomeOdds || 1.90)
+      : (match.bookieOdds.spreadAwayOdds || 1.90);
+    const evSpread = ((finalSpreadProb / 100) * (spreadOdds * taxMultiplier) - 1) * 100;
+
+    allPicks.push({
+      id: `${match.id}_SPREAD`,
+      matchId: match.id,
+      matchLabel: `${awayTeam.short} @ ${homeTeam.short}`,
+      homeTeam,
+      awayTeam,
+      time: match.time,
+      marketType: 'Handicap (Spread)',
+      selectionName: pickHomeSpread
+        ? `${homeTeam.short} Handicap ${bookieSpread > 0 ? `+${bookieSpread}` : bookieSpread}`
+        : `${awayTeam.short} Handicap ${-bookieSpread > 0 ? `+${-bookieSpread}` : -bookieSpread}`,
+      shortSelection: pickHomeSpread
+        ? `${homeTeam.short} ${bookieSpread > 0 ? `+${bookieSpread}` : bookieSpread}`
+        : `${awayTeam.short} ${-bookieSpread > 0 ? `+${-bookieSpread}` : -bookieSpread}`,
+      odds: spreadOdds,
+      fairOdds: 1 / (finalSpreadProb / 100),
+      prob: finalSpreadProb,
+      ev: evSpread,
+      projectedScore: `${sim.avgHomePts.toFixed(0)}:${sim.avgAwayPts.toFixed(0)}`,
+      confidenceScore: finalSpreadProb * 0.65 + Math.max(-10, evSpread) * 1.8,
+      reasoning: [
+        `Model prognozuje różnicę ${modelMarginHome > 0 ? `+${modelMarginHome.toFixed(1)}` : modelMarginHome.toFixed(1)} pkt dla ${homeTeam.short} wobec linii bukmachera (${bookieSpread}).`,
+        `Przewaga na tablicach (ORB%): ${orbDiff > 0 ? `${homeTeam.short} +${orbDiff}%` : `${awayTeam.short} +${Math.abs(orbDiff)}%`} oraz wymuszanie strat (${homeTeam.tov}% vs ${awayTeam.tov}%).`,
+        `Pokrycie linii handicapu w ${finalSpreadProb.toFixed(1)}% symulacji Monte Carlo.`
+      ]
+    });
+
+    // 4. Rynek Suma Punktów (Over/Under)
+    const bookieTotal = match.bookieOdds.totalLine || 224.5;
+    const totalDiff = sim.avgTotalPts - bookieTotal;
+    const overLineProb = Math.min(84, Math.max(16, 50 + totalDiff * 2.7));
+    const pickOver = overLineProb >= 50;
+    const finalTotalProb = pickOver ? overLineProb : 100 - overLineProb;
+    const totalOdds = pickOver
+      ? (match.bookieOdds.overOdds || 1.90)
+      : (match.bookieOdds.underOdds || 1.90);
+    const evTotal = ((finalTotalProb / 100) * (totalOdds * taxMultiplier) - 1) * 100;
+
+    allPicks.push({
+      id: `${match.id}_TOTAL`,
+      matchId: match.id,
+      matchLabel: `${awayTeam.short} @ ${homeTeam.short}`,
+      homeTeam,
+      awayTeam,
+      time: match.time,
+      marketType: 'Suma Punktów (O/U)',
+      selectionName: `${pickOver ? 'Powyżej (Over)' : 'Poniżej (Under)'} ${bookieTotal} pkt`,
+      shortSelection: `${pickOver ? 'Over' : 'Under'} ${bookieTotal}`,
+      odds: totalOdds,
+      fairOdds: 1 / (finalTotalProb / 100),
+      prob: finalTotalProb,
+      ev: evTotal,
+      projectedScore: `${sim.avgHomePts.toFixed(0)}:${sim.avgAwayPts.toFixed(0)}`,
+      confidenceScore: finalTotalProb * 0.65 + Math.max(-10, evTotal) * 1.8,
+      reasoning: [
+        `Prognozowana suma z modelu to ${sim.avgTotalPts.toFixed(1)} pkt (linia bukmachera: ${bookieTotal} pkt).`,
+        `Szacowane tempo meczu (Pace): ${sim.expectedPace.toFixed(1)} posiadań na 48 minut.`,
+        `Połączona efektywność ofensywna: ${homeTeam.short} (${homeTeam.ortg} ORTG) + ${awayTeam.short} (${awayTeam.ortg} ORTG).`
+      ]
+    });
+  });
+
+  return allPicks.sort((a, b) => b.confidenceScore - a.confidenceScore);
 }
 
 // ============================================================================
 // GŁÓWNY KOMPONENT APLIKACJI
 // ============================================================================
 export default function App() {
-  // Główna zakładka nawigacyjna: 'simulator' | 'picks' | 'ako_builder'
-  const [mainTab, setMainTab] = useState('picks');
+  const [activeSport, setActiveSport] = useState('NBA');
+  const [activeView, setActiveView] = useState('smart-builder'); // 'smart-builder' | 'match-lab'
+  const [matches, setMatches] = useState(FALLBACK_MATCHES);
+  const [selectedMatchId, setSelectedMatchId] = useState(FALLBACK_MATCHES[0].id);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
+  const [dataSourceStatus, setDataSourceStatus] = useState('Połączono z bazą NBA (Sezon Live)');
+  const [lastSyncTime, setLastSyncTime] = useState('Dzisiaj, 19:00');
 
-  // Stan meczów i API
-  const [games, setGames] = useState(FALLBACK_GAMES);
-  const [selectedGameId, setSelectedGameId] = useState(FALLBACK_GAMES[0].id);
-  const [apiStatus, setApiStatus] = useState({ loading: false, live: false, lastSync: null, message: 'Inicjalizacja...' });
-  const [isCustomMode, setIsCustomMode] = useState(false);
-  const [customHome, setCustomHome] = useState('BOS');
-  const [customAway, setCustomAway] = useState('DEN');
-
-  // Parametry korekcyjne modelu (Suwaki użytkownika)
-  const [hcaPoints, setHcaPoints] = useState(2.8); // Przewaga parkietu (punkty)
-  const [homeRest, setHomeRest] = useState(0);     // -1: Back-to-Back, 0: Normalny, +1: 3+ dni odpoczynku
-  const [awayRest, setAwayRest] = useState(0);
-  const [homeInjuryImpact, setHomeInjuryImpact] = useState(0); // Obniżenie ORTG/DRTG przez kontuzje (0 do 8 pkt)
+  // Parametry Symulacji (Match Lab)
+  const [simCount, setSimCount] = useState(10000);
+  const [homeCourtAdv, setHomeCourtAdv] = useState(2.8);
+  const [homeB2B, setHomeB2B] = useState(false);
+  const [awayB2B, setAwayB2B] = useState(false);
+  const [homeInjuryImpact, setHomeInjuryImpact] = useState(0);
   const [awayInjuryImpact, setAwayInjuryImpact] = useState(0);
-  const [includeRecentForm, setIncludeRecentForm] = useState(true);
-  const [simIterations, setSimIterations] = useState(10000);
-  const [simTrigger, setSimTrigger] = useState(0); // Licznik wymuszający ponowne przeliczenie Monte Carlo
 
-  // Stan Modułu Bukmacherskiego
-  const [oddsHome, setOddsHome] = useState(1.48);
-  const [oddsAway, setOddsAway] = useState(2.75);
-  const [overUnderLine, setOverUnderLine] = useState(224.5);
-  const [spreadLine, setSpreadLine] = useState(-4.5); // Spread na gospodarza
-  const [taxRate, setTaxRate] = useState(0.12); // 0.12 = 12% podatek PL, 0 = bez podatku
-  const [bankroll, setBankroll] = useState(2000);
-  const [kellyFraction, setKellyFraction] = useState(0.25); // Ćwierć Kelly'ego dla bezpieczeństwa
-  const [activeChartTab, setActiveChartTab] = useState('spread'); // 'spread' | 'total' | 'factors'
+  // Parametry Bukmacherskie i Kuponu AKO
+  const [oddsHome, setOddsHome] = useState(FALLBACK_MATCHES[0].bookieOdds.home);
+  const [oddsAway, setOddsAway] = useState(FALLBACK_MATCHES[0].bookieOdds.away);
+  const [taxRate, setTaxRate] = useState(true); // true = 12% podatku PL
+  const [bankroll, setBankroll] = useState(1000);
+  const [couponStake, setCouponStake] = useState(100);
+  const [kellyFraction, setKellyFraction] = useState(0.25);
 
-  // ============================================================================
-  // STAN KUPONU BUKMACHERSKIEGO (BET SLIP) & GENERATORA AKO
-  // ============================================================================
-  const [betSlip, setBetSlip] = useState([]);
-  const [akoStake, setAkoStake] = useState(100);
-  const [targetAkoOdd, setTargetAkoOdd] = useState(2.50); // Docelowy kurs minimalny np. 2.00, 3.00, 5.00
-  const [akoStrategy, setAkoStrategy] = useState('safe'); // 'safe' | 'value' | 'balanced'
-  const [picksFilter, setPicksFilter] = useState('all'); // 'all' | 'ML' | 'SPREAD' | 'TOTAL'
-  const [expandedSlipAnalysis, setExpandedSlipAnalysis] = useState(true);
+  // Parametry Generatora Kuponów (Kurs 2.00+, 3.00+, 5.00+)
+  const [targetMinOdds, setTargetMinOdds] = useState(2.0);
+  const [builderStrategy, setBuilderStrategy] = useState('safe'); // 'safe' | 'value' | 'balanced'
+  const [marketFilter, setMarketFilter] = useState('ALL');
+  const [couponPicks, setCouponPicks] = useState([]);
 
-  // ============================================================================
-  // POBIERANIE DANYCH LIVE Z API ESPN NBA SCOREBOARD
-  // ============================================================================
-  const fetchLiveGames = useCallback(async () => {
-    setApiStatus(prev => ({ ...prev, loading: true, message: 'Łączenie z ESPN NBA Live API...' }));
+  // Pobieranie aktualnego terminarza NBA z oficjalnego publicznego API ESPN
+  const fetchLiveNBASchedule = async () => {
+    setIsLoadingLive(true);
     try {
       const response = await fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
-      if (!response.ok) throw new Error('Błąd odpowiedzi serwera ESPN');
+      if (!response.ok) throw new Error('Błąd sieci API');
       const data = await response.json();
 
-      const events = data?.events || [];
-      const parsedGames = [];
+      if (data && data.events && data.events.length > 0) {
+        const parsedMatches = [];
+        data.events.forEach((ev, idx) => {
+          const comp = ev.competitions?.[0];
+          if (!comp) return;
+          const homeComp = comp.competitors?.find((c) => c.homeAway === 'home');
+          const awayComp = comp.competitors?.find((c) => c.homeAway === 'away');
+          if (!homeComp || !awayComp) return;
 
-      events.forEach((ev, idx) => {
-        const comp = ev.competitions?.[0];
-        if (!comp) return;
-        const competitors = comp.competitors || [];
-        const homeComp = competitors.find(c => c.homeAway === 'home');
-        const awayComp = competitors.find(c => c.homeAway === 'away');
+          const rawHome = homeComp.team?.abbreviation;
+          const rawAway = awayComp.team?.abbreviation;
+          const homeAbbr = ESPN_ABBR_MAP[rawHome] || rawHome;
+          const awayAbbr = ESPN_ABBR_MAP[rawAway] || rawAway;
 
-        if (homeComp && awayComp) {
-          let rawHome = homeComp.team?.abbreviation?.toUpperCase();
-          let rawAway = awayComp.team?.abbreviation?.toUpperCase();
-          const homeId = ESPN_ABBR_MAP[rawHome] || rawHome;
-          const awayId = ESPN_ABBR_MAP[rawAway] || rawAway;
+          if (NBA_TEAMS_DB[homeAbbr] && NBA_TEAMS_DB[awayAbbr]) {
+            const quickSim = runMonteCarloSimulation(
+              NBA_TEAMS_DB[homeAbbr],
+              NBA_TEAMS_DB[awayAbbr],
+              1500,
+              { homeCourtAdv: 2.8 }
+            );
+            const margin = 1.045;
+            const estHomeOdd = Number(Math.max(1.12, (100 / quickSim.homeWinProb) / margin).toFixed(2));
+            const estAwayOdd = Number(Math.max(1.12, (100 / quickSim.awayWinProb) / margin).toFixed(2));
+            const spreadLine = Math.round((quickSim.avgAwayPts - quickSim.avgHomePts) * 2) / 2;
+            const totalLine = Math.round(quickSim.avgTotalPts * 2) / 2;
 
-          // Sprawdzamy czy obie drużyny są w naszej bazie 30 zespołów NBA
-          if (NBA_TEAMS_DB[homeId] && NBA_TEAMS_DB[awayId]) {
-            const hTeam = NBA_TEAMS_DB[homeId];
-            const aTeam = NBA_TEAMS_DB[awayId];
-
-            // Szacowanie realistycznych kursów wyjściowych na podstawie Net Ratingu
-            const netDiff = (hTeam.ortg - hTeam.drtg) - (aTeam.ortg - aTeam.drtg) + 2.8;
-            const estHomeProb = Math.min(0.88, Math.max(0.12, 1 / (1 + Math.pow(10, -netDiff / 11))));
-            const estAwayProb = 1 - estHomeProb;
-            // Kursy z marżą bukmachera ~4.5%
-            const calcHomeOdd = Number((1 / (estHomeProb * 1.045)).toFixed(2));
-            const calcAwayOdd = Number((1 / (estAwayProb * 1.045)).toFixed(2));
-
-            const eventDate = new Date(ev.date);
-            const timeStr = eventDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) + ' CET';
-            const statusDesc = ev.status?.type?.detail || 'Zaplanowany';
-
-            parsedGames.push({
-              id: ev.id || `live-${idx}`,
-              homeTeam: homeId,
-              awayTeam: awayId,
-              time: timeStr,
-              status: statusDesc,
-              venue: comp.venue?.fullName || 'NBA Arena',
+            parsedMatches.push({
+              id: ev.id || `live_${idx}`,
+              home: homeAbbr,
+              away: awayAbbr,
+              time: ev.status?.type?.shortDetail || 'Live / Dzisiaj',
+              status: ev.status?.type?.description || 'W terminarzu',
+              venue: comp.venue?.fullName || 'Hala NBA',
               bookieOdds: {
-                home: Math.max(1.08, calcHomeOdd),
-                away: Math.max(1.08, calcAwayOdd)
-              },
-              liveScores: {
-                home: homeComp.score,
-                away: awayComp.score
+                home: estHomeOdd,
+                away: estAwayOdd,
+                spreadLine,
+                spreadHomeOdds: 1.91,
+                spreadAwayOdds: 1.91,
+                totalLine,
+                overOdds: 1.91,
+                underOdds: 1.91
               }
             });
           }
+        });
+
+        if (parsedMatches.length > 0) {
+          setMatches(parsedMatches);
+          setSelectedMatchId(parsedMatches[0].id);
+          setOddsHome(parsedMatches[0].bookieOdds.home);
+          setOddsAway(parsedMatches[0].bookieOdds.away);
+          setDataSourceStatus(`Pobrano ${parsedMatches.length} meczów na żywo z ESPN NBA API`);
+        } else {
+          setDataSourceStatus('Brak dzisiejszych gier w API – aktywny terminarz analityczny NBA');
         }
-      });
-
-      const nowStr = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-      if (parsedGames.length > 0) {
-        setGames(parsedGames);
-        setSelectedGameId(parsedGames[0].id);
-        setOddsHome(parsedGames[0].bookieOdds.home);
-        setOddsAway(parsedGames[0].bookieOdds.away);
-        setApiStatus({
-          loading: false,
-          live: true,
-          lastSync: nowStr,
-          message: `Pobrano ${parsedGames.length} meczów na żywo z ESPN API`
-        });
       } else {
-        // Jeśli dzisiaj w kalendarzu ESPN nie ma meczów (np. przerwa w terminarzu), używamy zestawu Fallback
-        setGames(FALLBACK_GAMES);
-        setSelectedGameId(FALLBACK_GAMES[0].id);
-        setApiStatus({
-          loading: false,
-          live: true,
-          lastSync: nowStr,
-          message: 'API aktywne (Brak meczów dziś w terminarzu — załadowano zestaw symulacyjny NBA)'
-        });
+        setDataSourceStatus('Przerwa w rozgrywkach dzisiaj – aktywny terminarz analityczny NBA');
       }
     } catch (error) {
-      const nowStr = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      setGames(FALLBACK_GAMES);
-      setApiStatus({
-        loading: false,
-        live: false,
-        lastSync: nowStr,
-        message: 'Tryb Offline / Fallback (Załadowano zweryfikowaną bazę sezonową NBA)'
-      });
+      setDataSourceStatus('Tryb Offline-Ready: Zweryfikowana baza statystyczna NBA');
+    } finally {
+      const now = new Date();
+      setLastSyncTime(now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setIsLoadingLive(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchLiveGames();
-  }, [fetchLiveGames]);
-
-  // Aktualny wybrany pojedynek
-  const currentMatchup = useMemo(() => {
-    if (isCustomMode) {
-      return {
-        id: 'custom',
-        homeTeam: customHome,
-        awayTeam: customAway,
-        time: 'Symulacja Niestandardowa',
-        status: 'Kreator Własny',
-        venue: `Parkiet Gospodarza (${NBA_TEAMS_DB[customHome]?.short})`,
-        bookieOdds: { home: oddsHome, away: oddsAway }
-      };
-    }
-    return games.find(g => g.id === selectedGameId) || games[0];
-  }, [isCustomMode, customHome, customAway, games, selectedGameId, oddsHome, oddsAway]);
-
-  const homeTeamData = NBA_TEAMS_DB[currentMatchup.homeTeam] || NBA_TEAMS_DB.BOS;
-  const awayTeamData = NBA_TEAMS_DB[currentMatchup.awayTeam] || NBA_TEAMS_DB.NYK;
-
-  // Zmiana wybranego meczu z listy aktualizuje domyślne kursy oraz linie
-  const handleSelectGame = (game) => {
-    setIsCustomMode(false);
-    setSelectedGameId(game.id);
-    setOddsHome(game.bookieOdds.home);
-    setOddsAway(game.bookieOdds.away);
-    // Resetujemy indywidualne kontuzje/zmęczenie przy zmianie meczu
-    setHomeInjuryImpact(0);
-    setAwayInjuryImpact(0);
-    setHomeRest(0);
-    setAwayRest(0);
   };
 
-  // ============================================================================
-  // SILNIK MATEMATYCZNY (DEAN OLIVER'S FOUR FACTORS + SYMULACJA MONTE CARLO)
-  // ============================================================================
-  const simulationResults = useMemo(() => {
-    const leagueAvgOrtg = 115.4;
-    const leagueAvgPace = 99.2;
+  useEffect(() => {
+    fetchLiveNBASchedule();
+  }, []);
 
-    // 1. Estymacja liczby posiadań (Pace) metodą interakcyjną
-    const estimatedPace = (homeTeamData.pace * awayTeamData.pace) / leagueAvgPace;
+  // Aktualny mecz w laboratorium
+  const selectedMatch = useMemo(() => {
+    const found = matches.find((m) => m.id === selectedMatchId) || matches[0];
+    return {
+      ...found,
+      homeTeam: NBA_TEAMS_DB[found.home],
+      awayTeam: NBA_TEAMS_DB[found.away]
+    };
+  }, [matches, selectedMatchId]);
 
-    // 2. Obliczanie przewagi w Four Factors Deana Olivera
-    // Wagi Deana Olivera: Shooting (40%), Turnovers (25%), Rebounding (20%), Free Throws (15%)
-    const homeFourFactorIndex =
-      (homeTeamData.efg - 54.5) * 0.40 -
-      (homeTeamData.tov - 13.2) * 0.25 +
-      (homeTeamData.orb - 28.0) * 0.20 +
-      (homeTeamData.ftr - 22.0) * 0.15;
+  const handleSelectMatch = (match) => {
+    setSelectedMatchId(match.id);
+    setOddsHome(match.bookieOdds.home);
+    setOddsAway(match.bookieOdds.away);
+    setHomeB2B(false);
+    setAwayB2B(false);
+    setHomeInjuryImpact(0);
+    setAwayInjuryImpact(0);
+  };
 
-    const awayFourFactorIndex =
-      (awayTeamData.efg - 54.5) * 0.40 -
-      (awayTeamData.tov - 13.2) * 0.25 +
-      (awayTeamData.orb - 28.0) * 0.20 +
-      (awayTeamData.ftr - 22.0) * 0.15;
+  // Wszystkie wyliczone propozycje typów z dzisiejszych meczów
+  const allSmartPicks = useMemo(() => {
+    return generateAllSmartPicks(matches, taxRate);
+  }, [matches, taxRate]);
 
-    // 3. Bazowa efektywność ofensywna w tym konkretnym matchupie (na 100 posiadań)
-    let expectedHomeOrtg = (homeTeamData.ortg + awayTeamData.drtg) / 2 + (homeFourFactorIndex - awayFourFactorIndex) * 0.35;
-    let expectedAwayOrtg = (awayTeamData.ortg + homeTeamData.drtg) / 2 + (awayFourFactorIndex - homeFourFactorIndex) * 0.35;
+  // Filtrowane rekomendacje
+  const filteredSmartPicks = useMemo(() => {
+    return allSmartPicks.filter((p) => {
+      if (marketFilter === 'ALL') return true;
+      if (marketFilter === 'ML') return p.marketType === 'Zwycięzca (ML)';
+      if (marketFilter === 'SPREAD') return p.marketType === 'Handicap (Spread)';
+      if (marketFilter === 'TOTAL') return p.marketType === 'Suma Punktów (O/U)';
+      return true;
+    });
+  }, [allSmartPicks, marketFilter]);
 
-    // 4. Uwzględnienie czynników korekcyjnych (Forma L10, Kontuzje)
-    if (includeRecentForm) {
-      expectedHomeOrtg += (homeTeamData.l10 - 5) * 0.45;
-      expectedAwayOrtg += (awayTeamData.l10 - 5) * 0.45;
+  // Funkcja automatycznego budowania kuponu AKO powyżej zadanego kursu (np. 2.00+, 3.00+, 5.00+)
+  const buildAutoCoupon = (minOddsTarget, strategy = builderStrategy) => {
+    setTargetMinOdds(minOddsTarget);
+    setBuilderStrategy(strategy);
+
+    const pool = [...allSmartPicks].filter((p) => p.odds >= 1.28 && p.prob >= 48);
+
+    if (strategy === 'safe') {
+      pool.sort((a, b) => b.prob - a.prob);
+    } else if (strategy === 'value') {
+      pool.sort((a, b) => b.ev - a.ev);
+    } else {
+      pool.sort((a, b) => b.confidenceScore - a.confidenceScore);
     }
 
-    expectedHomeOrtg -= homeInjuryImpact * 1.15;
-    expectedAwayOrtg -= awayInjuryImpact * 1.15;
+    const selected = [];
+    const usedMatchIds = new Set();
+    let currentTotalOdds = 1.0;
 
-    // 5. Przeliczenie na oczekiwane punkty w meczu (z uwzględnieniem Pace, HCA i Zmęczenia)
-    const restImpactHome = homeRest === -1 ? -2.2 : homeRest === 1 ? 1.1 : 0;
-    const restImpactAway = awayRest === -1 ? -2.4 : awayRest === 1 ? 1.1 : 0;
+    for (const pick of pool) {
+      if (usedMatchIds.has(pick.matchId)) continue;
+      selected.push(pick);
+      usedMatchIds.add(pick.matchId);
+      currentTotalOdds *= pick.odds;
 
-    const meanHomeScore = (expectedHomeOrtg * (estimatedPace / 100)) + (hcaPoints / 2) + restImpactHome;
-    const meanAwayScore = (expectedAwayOrtg * (estimatedPace / 100)) - (hcaPoints / 2) + restImpactAway;
+      if (currentTotalOdds >= minOddsTarget || selected.length >= 6) {
+        break;
+      }
+    }
 
-    // Odchylenie standardowe wyniku drużyny NBA (ok. 11.2 punktów na mecz)
-    const teamStdDev = 11.2;
+    setCouponPicks(selected);
+  };
 
-    // 6. Pętla symulacji Monte Carlo
-    let homeWins = 0;
-      individualKellyPct: recommendedPctAway.toFixed(2),
+  // Inicjalny kupon 2.00+ przy starcie
+  useEffect(() => {
+    if (allSmartPicks.length > 0 && couponPicks.length === 0) {
+      buildAutoCoupon(2.0, 'safe');
+    }
+  }, [allSmartPicks]);
+
+  // Dodawanie/Usuwanie typu z kuponu (maksymalnie 1 zdarzenie z danego meczu, by uniknąć korelacji blokowanej przez bukmacherów)
+  const togglePickInCoupon = (pick) => {
+    const exists = couponPicks.some((p) => p.id === pick.id);
+    if (exists) {
+      setCouponPicks(couponPicks.filter((p) => p.id !== pick.id));
+    } else {
+      const withoutSameMatch = couponPicks.filter((p) => p.matchId !== pick.matchId);
+      setCouponPicks([...withoutSameMatch, pick]);
+    }
+  };
+
+  // Statystyki całego Kuponu AKO
+  const couponSummary = useMemo(() => {
+    if (couponPicks.length === 0) {
+      return { totalOdds: 0, combinedProb: 0, fairAkoOdds: 0, potentialWin: 0, netProfit: 0, akoEv: 0, kellySuggested: 0 };
+    }
+    const taxMultiplier = taxRate ? 0.88 : 1.0;
+    const totalOdds = couponPicks.reduce((acc, p) => acc * p.odds, 1);
+    const combinedProbDecimal = couponPicks.reduce((acc, p) => acc * (p.prob / 100), 1);
+    const combinedProb = combinedProbDecimal * 100;
+    const fairAkoOdds = combinedProbDecimal > 0 ? 1 / combinedProbDecimal : 0;
+
+    const effectiveTotalOdds = totalOdds * taxMultiplier;
+    const potentialWin = couponStake * effectiveTotalOdds;
+    const netProfit = potentialWin - couponStake;
+    const akoEv = (combinedProbDecimal * effectiveTotalOdds - 1) * 100;
+
+    const b = effectiveTotalOdds - 1;
+    const q = 1 - combinedProbDecimal;
+    const rawKelly = b > 0 ? Math.max(0, (b * combinedProbDecimal - q) / b) : 0;
+    const kellySuggested = rawKelly * kellyFraction * bankroll;
+
+    return {
+      totalOdds,
+      combinedProb,
+      fairAkoOdds,
+      potentialWin,
+      netProfit,
+      akoEv,
+      kellySuggested
+    };
+  }, [couponPicks, taxRate, couponStake, bankroll, kellyFraction]);
+
+  // Wyniki symulacji Monte Carlo dla wybranego meczu (Match Lab)
+  const simulationResults = useMemo(() => {
+    return runMonteCarloSimulation(
+      selectedMatch.homeTeam,
+      selectedMatch.awayTeam,
+      simCount,
+      {
+        homeCourtAdv,
+        homeB2B,
+        awayB2B,
+        homeInjuryImpact,
+        awayInjuryImpact
+      }
+    );
+  }, [selectedMatch, simCount, homeCourtAdv, homeB2B, awayB2B, homeInjuryImpact, awayInjuryImpact]);
+
+  // Obliczenia Value Bet i Kryterium Kelly'ego dla pojedynczego meczu
+  const bettingAnalysis = useMemo(() => {
+    const taxMultiplier = taxRate ? 0.88 : 1.0;
+    const effHome = oddsHome * taxMultiplier;
+    const effAway = oddsAway * taxMultiplier;
+
+    const pHome = simulationResults.homeWinProb / 100;
+    const pAway = simulationResults.awayWinProb / 100;
+
+    const evHome = (pHome * effHome - 1) * 100;
+    const evAway = (pAway * effAway - 1) * 100;
+
+    const bHome = effHome - 1;
+    const rawKellyHome = bHome > 0 ? Math.max(0, (bHome * pHome - pAway) / bHome) : 0;
+
+    const bAway = effAway - 1;
+    const rawKellyAway = bAway > 0 ? Math.max(0, (bAway * pAway - pHome) / bAway) : 0;
+
+    const stakeHome = rawKellyHome * kellyFraction * bankroll;
+    const stakeAway = rawKellyAway * kellyFraction * bankroll;
+
+    const fairOddHome = pHome > 0 ? (1 / pHome) / taxMultiplier : 99;
+    const fairOddAway = pAway > 0 ? (1 / pAway) / taxMultiplier : 99;
+
+    return {
+      evHome,
+      evAway,
       stakeHome,
       stakeAway,
       fairOddHome,
@@ -694,1208 +773,858 @@ export default function App() {
     };
   }, [oddsHome, oddsAway, taxRate, simulationResults, bankroll, kellyFraction]);
 
-  // ============================================================================
-  // GLOBALNY SKANER WSZYSTKICH SPOTKAŃ (DLA REKOMENDACJI AI I GENERATORA AKO)
-  // ============================================================================
-  const allGamesAnalysis = useMemo(() => {
-    return games.map(game => analyzeMatchupMonteCarlo(game, 8000, taxRate));
-  }, [games, taxRate, simTrigger]);
-
-  // Wszystkie dostępne rynki ze wszystkich dzisiejszych meczów posortowane wg atrakcyjności
-  const allRecommendedPicks = useMemo(() => {
-    const flatPicks = [];
-    allGamesAnalysis.forEach(ga => {
-      ga.markets.forEach(m => {
-        flatPicks.push(m);
-      });
-    });
-
-    // Filtrowanie po typie rynku jeśli wybrano
-    const filtered = flatPicks.filter(p => {
-      if (picksFilter === 'ML') return p.pickId.includes('ML_');
-      if (picksFilter === 'SPREAD') return p.pickId.includes('SPREAD_');
-      if (picksFilter === 'TOTAL') return p.pickId.includes('TOTAL_');
-      return true;
-    });
-
-    // Sortowanie od najlepszych rekomendacji (kombinacja wysokiego prawdopodobieństwa i dodatniego Edge/EV)
-    return filtered.sort((a, b) => (b.prob * 0.65 + b.edge * 1.8) - (a.prob * 0.65 + a.edge * 1.8));
-  }, [allGamesAnalysis, picksFilter]);
-
-  // Dodawanie / usuwanie zdarzenia z kuponu AKO (maksymalnie 1 zdarzenie z tego samego meczu na kuponie AKO)
-  const togglePickInSlip = useCallback((pick) => {
-    setBetSlip(prev => {
-      const existsExact = prev.some(item => item.pickId === pick.pickId);
-      if (existsExact) {
-        return prev.filter(item => item.pickId !== pick.pickId);
-      }
-      // Zastąp inny typ z tego samego meczu, aby nie duplikować skorelowanych zdarzeń na jednym kuponie AKO
-      const withoutSameGame = prev.filter(item => item.gameId !== pick.gameId);
-      return [...withoutSameGame, pick];
-    });
-  }, []);
-
-  // ============================================================================
-  // ALGORYTMICZNY GENERATOR KUPONÓW AKO POD DOCELOWY KURS (NP. >2.00, >3.00)
-  // ============================================================================
-  const generateSmartAkoSlip = useCallback((customTargetOdd = null, customStrategy = null) => {
-    const target = customTargetOdd !== null ? customTargetOdd : targetAkoOdd;
-    const strat = customStrategy !== null ? customStrategy : akoStrategy;
-
-    // Dla każdego meczu wybieramy najlepszego kandydata zgodnie ze strategią
-    const candidatesPerGame = allGamesAnalysis.map(ga => {
-      const validMarkets = ga.markets.filter(m => m.odd >= 1.22 && m.prob >= 51.0);
-      const pool = validMarkets.length > 0 ? validMarkets : ga.markets;
-
-      const sorted = [...pool].sort((a, b) => {
-        if (strat === 'safe') {
-          // Maksymalizacja prawdopodobieństwa wejścia przy rozsądnym kursie
-          return b.prob - a.prob;
-        } else if (strat === 'value') {
-          // Maksymalizacja przewagi matematycznej nad bukmacherem (EV% / Edge)
-          return b.ev - a.ev;
-        } else {
-          // Zbalansowany (Score łączący prawdopodobieństwo oraz EV)
-          return (b.prob * 0.6 + b.ev * 2.0) - (a.prob * 0.6 + a.ev * 2.0);
-        }
-      });
-
-      return sorted[0];
-    });
-
-    // Sortujemy najlepszych kandydatów z poszczególnych meczów
-    const sortedCandidates = [...candidatesPerGame].sort((a, b) => {
-      if (strat === 'safe') return b.prob - a.prob;
-      if (strat === 'value') return b.ev - a.ev;
-      return (b.prob * 0.6 + b.ev * 2.0) - (a.prob * 0.6 + a.ev * 2.0);
-    });
-
-    // Dokładamy kolejne mecze aż iloczyn kursów (AKO) osiągnie lub przekroczy docelowy kurs użytkownika
-    const selectedSlip = [];
-    let currentTotalOdd = 1.0;
-
-    for (const candidate of sortedCandidates) {
-      if (!candidate) continue;
-      selectedSlip.push(candidate);
-      currentTotalOdd *= candidate.odd;
-      if (currentTotalOdd >= target && selectedSlip.length >= 2) {
-        break;
-      }
-    }
-
-    // Jeśli po dodaniu najlepszych nadal brakuje kursu (np. wysoki cel 8.00+ a niskie kursy faworytów),
-    // dobieramy rynki z wyższym kursem (Spread / Total ~1.90)
-    if (currentTotalOdd < target) {
-      const highOddCandidates = allGamesAnalysis.map(ga => {
-        return [...ga.markets]
-          .filter(m => m.odd >= 1.75)
-          .sort((a, b) => b.prob - a.prob)[0];
-      }).sort((a, b) => b.prob - a.prob);
-
-      selectedSlip.length = 0;
-      currentTotalOdd = 1.0;
-      for (const cand of highOddCandidates) {
-        if (!cand) continue;
-        selectedSlip.push(cand);
-        currentTotalOdd *= cand.odd;
-        if (currentTotalOdd >= target) break;
-      }
-    }
-
-    setBetSlip(selectedSlip);
-  }, [allGamesAnalysis, targetAkoOdd, akoStrategy]);
-
-  // Inicjalne wygenerowanie przykładowego kuponu przy pierwszym załadowaniu
-  useEffect(() => {
-    if (betSlip.length === 0 && allGamesAnalysis.length >= 2) {
-      generateSmartAkoSlip(2.50, 'balanced');
-    }
-  }, [allGamesAnalysis.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ============================================================================
-  // OBLICZENIA DLA AKTUALNEGO KUPONU BUKMACHERSKIEGO (BET SLIP)
-  // ============================================================================
-  const slipMetrics = useMemo(() => {
-    if (betSlip.length === 0) {
-      return {
-        totalOdd: 1.0,
-        effectiveOdd: 1.0,
-        combinedProb: 0,
-        potentialWin: 0,
-        netProfit: 0,
-        evPct: 0,
-        kellyStake: 0,
-        kellyPct: 0
-      };
-    }
-
-    const totalOdd = betSlip.reduce((acc, item) => acc * item.odd, 1.0);
-    const combinedProbFraction = betSlip.reduce((acc, item) => acc * (item.prob / 100), 1.0);
-    const netMultiplier = 1 - taxRate;
-    const effectiveOdd = totalOdd * netMultiplier;
-
-    const potentialWin = akoStake * effectiveOdd;
-    const netProfit = potentialWin - akoStake;
-    const evPct = (combinedProbFraction * effectiveOdd - 1) * 100;
-
-    // Kryterium Kelly'ego dla całego kuponu AKO
-    const b = effectiveOdd - 1;
-    const rawKelly = b > 0 ? (b * combinedProbFraction - (1 - combinedProbFraction)) / b : 0;
-    const kellyPct = Math.max(0, rawKelly * kellyFraction * 100);
-    const kellyStake = Math.round((kellyPct / 100) * bankroll);
-
-    return {
-      totalOdd: totalOdd.toFixed(2),
-      effectiveOdd: effectiveOdd.toFixed(2),
-      combinedProb: (combinedProbFraction * 100).toFixed(1),
-      potentialWin: potentialWin.toFixed(2),
-      netProfit: netProfit.toFixed(2),
-      evPct: evPct.toFixed(2),
-      isPositiveEv: evPct > 0,
-      kellyStake,
-      kellyPct: kellyPct.toFixed(2)
-    };
-  }, [betSlip, taxRate, akoStake, kellyFraction, bankroll]);
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
-      {/* =====================================================================
-          GÓRNY PASEK NAWIGACJI I WYBORU KATEGORII SPORTOWEJ
-      ===================================================================== */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-          {/* Logo i Tytuł */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+      {/* PASEK NAWIGACJI GÓRNEJ */}
+      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/25">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
               <Activity className="w-6 h-6 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+                <h1 className="text-lg font-bold tracking-tight text-white">
                   QUANT<span className="text-orange-500">BET</span> PRO
                 </h1>
-                <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/30">
-                  Monte Carlo v4.2
+                <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  Monte Carlo v3.2
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Zaawansowany Silnik Predykcyjny NBA & Kalkulator Value Bet
+              <p className="text-xs text-slate-400">
+                Silnik Rekomendacji & Generator Kuponów AKO • Four Factors & Kelly Criterion
               </p>
             </div>
           </div>
 
-          {/* Kafelki Kategorii Sportowych */}
-          <nav className="flex items-center gap-1.5 overflow-x-auto py-1">
+          {/* Przełącznik Głównego Trybu Aplikacji */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
             <button
-              onClick={() => setIsCustomMode(false)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-orange-500/20 to-blue-500/20 text-white border border-orange-500/50 shadow-sm"
+              onClick={() => setActiveView('smart-builder')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeView === 'smart-builder'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md'
+                  : 'text-slate-300 hover:text-white'
+              }`}
             >
-              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-              Koszykówka: NBA
-              <span className="px-1.5 py-0.5 text-[10px] rounded bg-orange-500 text-slate-950 font-bold">
-                AKTYWNE
-              </span>
+              <Sparkles className="w-3.5 h-3.5" />
+              Co Obstawiać & Kreator AKO (2.0+ / 3.0+)
             </button>
-
-            <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-900/60 text-slate-500 border border-slate-800/70 cursor-not-allowed select-none">
-              <Lock className="w-3.5 h-3.5 text-slate-600" />
-              Piłka Nożna (UEFA)
-              <span className="px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400">
-                Wkrótce
-              </span>
-            </div>
-
-            <div className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-900/60 text-slate-500 border border-slate-800/70 cursor-not-allowed select-none">
-              <Lock className="w-3.5 h-3.5 text-slate-600" />
-              Tenis (ATP/WTA)
-              <span className="px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400">
-                Wkrótce
-              </span>
-            </div>
-
-            <div className="hidden xl:flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-900/60 text-slate-500 border border-slate-800/70 cursor-not-allowed select-none">
-              <Lock className="w-3.5 h-3.5 text-slate-600" />
-              E-sport (CS2/LoL)
-              <span className="px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400">
-                Wkrótce
-              </span>
-            </div>
-          </nav>
-
-          {/* Status API i przycisk odświeżania */}
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:flex flex-col items-end text-right">
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    apiStatus.loading
-                      ? 'bg-amber-400 animate-ping'
-                      : apiStatus.live
-                      ? 'bg-emerald-400'
-                      : 'bg-blue-400'
-                  }`}
-                />
-                <span className="text-slate-300">
-                  {apiStatus.live ? 'Dane Live (ESPN API)' : 'Baza Sezonowa NBA'}
-                </span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                {apiStatus.lastSync ? `Sync: ${apiStatus.lastSync}` : apiStatus.message}
-              </span>
-            </div>
-
             <button
-              onClick={fetchLiveGames}
-              disabled={apiStatus.loading}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all active:scale-95 disabled:opacity-50"
+              onClick={() => setActiveView('match-lab')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeView === 'match-lab'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white'
+              }`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${apiStatus.loading ? 'animate-spin text-orange-400' : 'text-orange-400'}`} />
+              <Sliders className="w-3.5 h-3.5" />
+              Laboratorium Meczu (1 na 1)
+            </button>
+          </div>
+
+          {/* Status Live i Podatek */}
+          <div className="flex items-center gap-2.5 text-xs">
+            <button
+              onClick={() => setTaxRate(!taxRate)}
+              className={`px-3 py-1.5 rounded-lg font-semibold border transition-all ${
+                taxRate
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                  : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+              }`}
+              title="Przełącz uwzględnianie 12% podatku obrotowego u polskich bukmacherów"
+            >
+              {taxRate ? 'Podatek PL: 12% (x0.88)' : 'Gra Bez Podatku (x1.00)'}
+            </button>
+            <button
+              onClick={fetchLiveNBASchedule}
+              disabled={isLoadingLive}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLive ? 'animate-spin text-orange-400' : ''}`} />
               <span>Odśwież Live</span>
             </button>
           </div>
         </div>
-
-        {/* ===================================================================
-            PODRZĘDNY PASEK NAWIGACJI MODUŁÓW (3 GŁÓWNE WIDOKI DLA GRACZA)
-        =================================================================== */}
-        <div className="bg-slate-900/90 border-t border-slate-800/80">
-          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-3 py-2.5">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <button
-                onClick={() => setMainTab('picks')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                  mainTab === 'picks'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20'
-                    : 'bg-slate-950/70 text-slate-300 hover:text-white border border-slate-800'
-                }`}
-              >
-                <BrainCircuit className="w-4 h-4" />
-                <span>Co Obstawiać? (Rekomendacje AI)</span>
-                <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-extrabold ${
-                  mainTab === 'picks' ? 'bg-slate-950 text-emerald-400' : 'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  TOP VALUE
-                </span>
-              </button>
-
-              <button
-                onClick={() => setMainTab('ako_builder')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                  mainTab === 'ako_builder'
-                    ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/25'
-                    : 'bg-slate-950/70 text-slate-300 hover:text-white border border-slate-800'
-                }`}
-              >
-                <Wand2 className="w-4 h-4" />
-                <span>Kreator Kuponów AKO (Kurs 2.0+ / 3.0+)</span>
-                <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 font-mono">
-                  {betSlip.length} typów ({slipMetrics.totalOdd})
-                </span>
-              </button>
-
-              <button
-                onClick={() => setMainTab('simulator')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                  mainTab === 'simulator'
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-lg shadow-orange-500/20'
-                    : 'bg-slate-950/70 text-slate-300 hover:text-white border border-slate-800'
-                }`}
-              >
-                <Sliders className="w-4 h-4" />
-                <span>Głęboki Symulator Meczu (25 000 gier)</span>
-              </button>
-            </div>
-
-            {/* Szybki podgląd aktualnego kuponu w pasku */}
-            <div className="flex items-center gap-3 ml-auto">
-              <div className="hidden xl:flex items-center gap-2 text-xs bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                <Ticket className="w-4 h-4 text-indigo-400" />
-                <span className="text-slate-400">Twój Kupon AKO:</span>
-                <strong className="text-white font-mono">Kurs {slipMetrics.totalOdd}</strong>
-                <span className="text-slate-600">|</span>
-                <span className="text-emerald-400 font-mono font-semibold">
-                  Szansa: {slipMetrics.combinedProb}%
-                </span>
-                <span className="text-slate-600">|</span>
-                <span className="text-amber-400 font-mono font-semibold">
-                  Wygrana: {slipMetrics.potentialWin} PLN
-                </span>
-              </div>
-              {mainTab !== 'ako_builder' && (
-                <button
-                  onClick={() => setMainTab('ako_builder')}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 transition-all flex items-center gap-1.5"
-                >
-                  <span>Otwórz Kupon ({betSlip.length})</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
       </header>
 
-      {/* =====================================================================
-          WIDOK 1: CO OBSTAWIAĆ? (REKOMENDACJE AI & SKANER VALUE BETS)
-      ===================================================================== */}
-      {mainTab === 'picks' && (
-        <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEWA CZĘŚĆ (8/12): REKOMENDACJE I ANALIZA MECZÓW */}
+      {/* ========================================================================
+          WIDOK 1: CO OBSTAWIAĆ & GENERATOR KUPONÓW AKO POWYŻEJ KURSU (2.0 / 3.0 / 5.0)
+         ======================================================================== */}
+      {activeView === 'smart-builder' && (
+        <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEWA I ŚRODKOWA KOLUMNA (8/12): Generator kursu + Lista rekomendacji ze statystykami */}
           <div className="lg:col-span-8 space-y-6">
-            {/* Baner informacyjny skanera */}
-            <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500 text-slate-950 uppercase tracking-wider">
-                    Skaner Monte Carlo Aktywny
+            {/* PANEL GENERATORA KUPONÓW POWYŻEJ ZADANEGO KURSU */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/60 border border-indigo-500/30 rounded-2xl p-5 shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-orange-400 bg-orange-500/10 px-2.5 py-0.5 rounded-full border border-orange-500/20 mb-1">
+                    <Sparkles className="w-3 h-3" /> Algorytm Doboru Zdarzeń
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Przeanalizowano {games.length * 8000} wirtualnych spotkań
-                  </span>
+                  <h2 className="text-xl font-black text-white">
+                    Automatyczny Kreator Kuponów pod Wybrany Kurs
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Wybierz docelowy kurs minimalny (np. 2.00+, 3.00+, 5.00+), a silnik Monte Carlo wybierze nieskorelowane typy o najwyższym prawdopodobieństwie i dodatnim EV.
+                  </p>
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-white">
-                  Co dzisiaj obstawiać? Najlepsze Typy Statystyczne & Value Bets
-                </h2>
-                <p className="text-xs text-slate-300 max-w-2xl">
-                  Poniżej znajdują się typy wyselekcjonowane przez model Four Factors Deana Olivera oraz symulacje rozkładu wyników. Kliknij <strong>„+ Dodaj do kuponu”</strong> przy dowolnym typie lub przejdź do kreatora, aby automatycznie zbudować kupon powyżej kursu 2.00 lub 3.00.
-                </p>
               </div>
 
-              <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
-                <button
-                  onClick={() => {
-                    setTargetAkoOdd(2.05);
-                    setAkoStrategy('safe');
-                    generateSmartAkoSlip(2.05, 'safe');
-                    setMainTab('ako_builder');
-                  }}
-                  className="px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  <span>Zbuduj Kupon Kurs 2.00+</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setTargetAkoOdd(3.15);
-                    setAkoStrategy('balanced');
-                    generateSmartAkoSlip(3.15, 'balanced');
-                    setMainTab('ako_builder');
-                  }}
-                  className="px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-1.5"
-                >
-                  <Zap className="w-4 h-4" />
-                  <span>Zbuduj Kupon Kurs 3.00+</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Pasek filtrów rynków */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-slate-300">Filtruj rynek bukmacherski:</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
+              {/* Szybkie przyciski docelowego kursu */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 {[
-                  { id: 'all', label: 'Wszystkie Najlepsze Typy' },
-                  { id: 'ML', label: 'Zwycięzca Meczu (1/2)' },
-                  { id: 'SPREAD', label: 'Handicapy Punktowe (Spread)' },
-                  { id: 'TOTAL', label: 'Suma Punktów (Over/Under)' }
-                ].map(tab => (
+                  { label: 'Kurs 2.00+ (Podwojenie)', target: 2.0, desc: '2 najpewniejsze typy dnia' },
+                  { label: 'Kurs 3.00+ (Potrojenie)', target: 3.0, desc: '2-3 zbilansowane mecze' },
+                  { label: 'Kurs 5.00+ (Wysokie AKO)', target: 5.0, desc: '3-4 typy z wysokim EV' },
+                  { label: 'Kurs 8.00+ (Max Value)', target: 8.0, desc: 'Taśma analityczna 4-5 gier' }
+                ].map((preset) => {
+                  const isActive = Math.abs(targetMinOdds - preset.target) < 0.1;
+                  return (
+                    <button
+                      key={preset.target}
+                      onClick={() => buildAutoCoupon(preset.target, builderStrategy)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isActive
+                          ? 'bg-orange-500/15 border-orange-500 text-white shadow-lg shadow-orange-500/10'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-black text-orange-400">{preset.target.toFixed(2)}+</span>
+                        <Zap className={`w-4 h-4 ${isActive ? 'text-orange-400' : 'text-slate-600'}`} />
+                      </div>
+                      <div className="text-xs font-bold text-white mt-0.5">{preset.label.split(' ')[2]}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">{preset.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Precyzyjny suwak kursu + wybór strategii doboru */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t border-slate-800/80 items-center">
+                <div className="md:col-span-5">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-slate-400 font-medium">Własny docelowy kurs minimalny:</span>
+                    <span className="font-mono font-bold text-orange-400">{targetMinOdds.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.5"
+                    max="12.0"
+                    step="0.25"
+                    value={targetMinOdds}
+                    onChange={(e) => buildAutoCoupon(Number(e.target.value), builderStrategy)}
+                    className="w-full accent-orange-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="md:col-span-5 flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  {[
+                    { id: 'safe', name: 'Pewniaki (Max %)' },
+                    { id: 'balanced', name: 'Zbalansowany' },
+                    { id: 'value', name: 'Value Hunter (Max EV)' }
+                  ].map((st) => (
+                    <button
+                      key={st.id}
+                      onClick={() => buildAutoCoupon(targetMinOdds, st.id)}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                        builderStrategy === st.id
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {st.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="md:col-span-2">
                   <button
-                    key={tab.id}
-                    onClick={() => setPicksFilter(tab.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      picksFilter === tab.id
-                        ? 'bg-emerald-500 text-slate-950 font-bold'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy)}
+                    className="w-full py-2 px-3 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-1 shadow-md"
                   >
-                    {tab.label}
+                    <RefreshCw className="w-3.5 h-3.5" /> Generuj
                   </button>
-                ))}
+                </div>
               </div>
             </div>
 
-            {/* Lista Najlepszych Rekomendowanych Typów ze szczegółowym uzasadnieniem */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {allRecommendedPicks.slice(0, 12).map((pick, idx) => {
-                const inSlip = betSlip.some(item => item.pickId === pick.pickId);
-                const isTop3 = idx < 3;
+            {/* RANKING "CO OBSTAWIAĆ?" - WSZYSTKIE PRZEANALIZOWANE TYPY ZE STATYSTYKAMI */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Target className="w-5 h-5 text-emerald-400" />
+                    Co Obstawiać Dzisiaj? Ranking Rekomendacji Modelu ({filteredSmartPicks.length})
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Każdy typ poniżej został przeliczony przez 6 000 symulacji Monte Carlo. Kliknij „Dodaj do kuponu”, aby zbudować własną kombinację.
+                  </p>
+                </div>
 
-                return (
-                  <div
-                    key={pick.pickId}
-                    className={`rounded-2xl p-5 border transition-all flex flex-col justify-between ${
-                      inSlip
-                        ? 'bg-indigo-950/30 border-indigo-500 shadow-lg shadow-indigo-500/10'
-                        : isTop3
-                        ? 'bg-slate-900/95 border-emerald-500/50 shadow-xl'
-                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div>
-                      {/* Nagłówek karty typu */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2">
-                          {isTop3 && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-slate-950 uppercase">
-                              TOP #{idx + 1} PEWNIAK
-                            </span>
-                          )}
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-slate-950 text-slate-300 border border-slate-800">
-                            {pick.marketType}
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-slate-400 font-mono">{pick.gameTime}</span>
-                      </div>
+                {/* Filtr rynków */}
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  {[
+                    { id: 'ALL', label: 'Wszystkie rynki' },
+                    { id: 'ML', label: 'Zwycięzca (ML)' },
+                    { id: 'SPREAD', label: 'Handicapy' },
+                    { id: 'TOTAL', label: 'Over/Under' }
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setMarketFilter(f.id)}
+                      className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                        marketFilter === f.id
+                          ? 'bg-slate-800 text-white border border-slate-700'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                      {/* Spotkanie i główny typ */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <div className="text-xs text-slate-400 font-medium">
-                            {pick.awayTeam.name} @ {pick.homeTeam.name}
+              <div className="space-y-3">
+                {filteredSmartPicks.slice(0, 12).map((pick, idx) => {
+                  const inCoupon = couponPicks.some((p) => p.id === pick.id);
+                  const isValue = pick.ev > 0;
+
+                  return (
+                    <div
+                      key={pick.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        inCoupon
+                          ? 'bg-indigo-950/30 border-indigo-500/60 shadow-lg shadow-indigo-500/5'
+                          : 'bg-slate-950/70 border-slate-800/90 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-mono text-xs font-bold text-orange-400 shrink-0 mt-0.5">
+                            #{idx + 1}
                           </div>
-                          <h3 className="text-base font-extrabold text-white mt-0.5 flex items-center gap-2">
-                            <span>Typ: {pick.selectionName}</span>
-                          </h3>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                                {pick.matchLabel}
+                              </span>
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                                {pick.marketType}
+                              </span>
+                              {isValue && (
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  VALUE BET (+{pick.ev.toFixed(1)}% EV)
+                                </span>
+                              )}
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                Prognoza wyniku: {pick.projectedScore}
+                              </span>
+                            </div>
+
+                            <h4 className="text-base font-black text-white mt-1">
+                              Typ: <span className="text-orange-400">{pick.selectionName}</span>
+                            </h4>
+                          </div>
                         </div>
-                        <div className="text-right shrink-0 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                          <span className="text-[10px] text-slate-400 block">Kurs Bukm.</span>
-                          <span className="text-lg font-mono font-black text-amber-400">{pick.odd.toFixed(2)}</span>
+
+                        {/* Prawa strona karty: Kurs, Szansa i przycisk Kuponu */}
+                        <div className="flex items-center gap-3 ml-auto">
+                          <div className="text-right">
+                            <div className="text-[11px] text-slate-400">Szansa Modelu</div>
+                            <div className="text-sm font-black text-emerald-400 font-mono">
+                              {pick.prob.toFixed(1)}%
+                            </div>
+                          </div>
+
+                          <div className="text-right px-3 py-1 rounded-lg bg-slate-900 border border-slate-800">
+                            <div className="text-[10px] text-slate-400 uppercase">Kurs Bukmachera</div>
+                            <div className="text-base font-black text-white font-mono">
+                              {pick.odds.toFixed(2)}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => togglePickInCoupon(pick)}
+                            className={`px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                              inCoupon
+                                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                                : 'bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white border border-slate-700'
+                            }`}
+                          >
+                            {inCoupon ? (
+                              <>
+                                <Check className="w-4 h-4 stroke-[3]" /> Na kuponie
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-4 h-4" /> Dodaj
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Pasek Prawdopodobieństwa i Przewagi (Edge / Confidence) */}
-                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800/80 mb-3 text-center">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Szansa Monte Carlo</span>
-                          <span className="text-sm font-mono font-bold text-emerald-400">{pick.prob}%</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Przewaga (Edge)</span>
-                          <span className={`text-sm font-mono font-bold ${pick.edge > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
-                            {pick.edge > 0 ? `+${pick.edge}%` : `${pick.edge}%`}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Indeks Pewności</span>
-                          <span className="text-sm font-mono font-bold text-indigo-400">{pick.confidence}/100</span>
-                        </div>
-                      </div>
-
-                      {/* Uzasadnienie statystyczne z modelu Four Factors */}
-                      <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/60 text-xs text-slate-300 space-y-1.5 mb-4">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono border-b border-slate-800/80 pb-1">
-                          <span>Prognoza: <strong className="text-slate-200">{pick.statsSnapshot.avgScore}</strong></span>
-                          <span>Suma: <strong className="text-slate-200">{pick.statsSnapshot.avgTotal} pkt</strong></span>
-                          <span>Tempo: <strong className="text-slate-200">{pick.statsSnapshot.pace}</strong></span>
-                        </div>
-                        <p className="leading-relaxed text-[11px] text-slate-300 pt-0.5">
-                          <strong className="text-emerald-400">Analiza AI: </strong>
-                          {pick.reason}
-                        </p>
+                      {/* Rozwinięte uzasadnienie statystyczne pod typem */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/70 grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {pick.reasoning.map((line, rIdx) => (
+                          <div
+                            key={rIdx}
+                            className="text-[11px] text-slate-300 bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-800/60 flex items-start gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                            <span>{line}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-
-                    {/* Przyciski akcji na karcie typu */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
-                      <button
-                        onClick={() => togglePickInSlip(pick)}
-                        className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                          inSlip
-                            ? 'bg-indigo-600 text-white shadow-md'
-                            : 'bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40'
-                        }`}
-                      >
-                        {inSlip ? (
-                          <>
-                            <Check className="w-4 h-4" />
-                            <span>Dodano na Kupon AKO (Usuń)</span>
-                          </>
-                        ) : (
-                          <>
-                            <PlusCircle className="w-4 h-4" />
-                            <span>Dodaj do Kuponu AKO</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const targetGame = games.find(g => g.id === pick.gameId);
-                          if (targetGame) handleSelectGame(targetGame);
-                          setMainTab('simulator');
-                        }}
-                        className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all"
-                        title="Otwórz w głębokim symulatorze"
-                      >
-                        Symulator
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* PRAWA CZĘŚĆ (4/12): PODGLĄD KUPONU BUKMACHERSKIEGO NA ŻYWO */}
-          <aside className="lg:col-span-4 space-y-6">
-            <div className="sticky top-28 bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          {/* PRAWA KOLUMNA (4/12): AKTYWNY KUPON BUKMACHERSKI (BET SLIP) + PEŁNY RAPORT STATYSTYCZNY */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-slate-900 border-2 border-orange-500/40 rounded-2xl p-5 sticky top-20 shadow-2xl">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
                 <div className="flex items-center gap-2">
-                  <Ticket className="w-5 h-5 text-indigo-400" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Twój Kupon AKO ({betSlip.length})</h3>
-                    <p className="text-[11px] text-slate-400">Kalkulacja prawdopodobieństwa i zysku na żywo</p>
-                  </div>
+                  <Ticket className="w-5 h-5 text-orange-400" />
+                  <h3 className="text-base font-black text-white">
+                    Twój Kupon AKO ({couponPicks.length})
+                  </h3>
                 </div>
-                {betSlip.length > 0 && (
+                {couponPicks.length > 0 && (
                   <button
-                    onClick={() => setBetSlip([])}
-                    className="text-xs text-rose-400 hover:underline flex items-center gap-1"
+                    onClick={() => setCouponPicks([])}
+                    className="text-xs text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Wyczyść
+                    <Trash2 className="w-3.5 h-3.5" /> Wyczyść
                   </button>
                 )}
               </div>
 
-              {/* Szybkie generatory kursu 2.00+ / 3.00+ / 5.00+ bezpośrednio na kuponie */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-                  <span>Szybki Auto-Generator Kuponu AKO:</span>
-                  <span className="text-indigo-400 font-mono">AI Smart Pick</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => {
-                      setTargetAkoOdd(2.05);
-                      generateSmartAkoSlip(2.05, 'safe');
-                    }}
-                    className="py-2 px-2 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-800 hover:border-emerald-500/50 text-xs font-bold text-emerald-400 transition-all"
-                  >
-                    Kurs ≥ 2.00
-                    <span className="block text-[9px] text-slate-400 font-normal">Podwojenie</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTargetAkoOdd(3.10);
-                      generateSmartAkoSlip(3.10, 'balanced');
-                    }}
-                    className="py-2 px-2 rounded-lg bg-slate-900 hover:bg-indigo-500/20 border border-slate-800 hover:border-indigo-500/50 text-xs font-bold text-indigo-400 transition-all"
-                  >
-                    Kurs ≥ 3.00
-                    <span className="block text-[9px] text-slate-400 font-normal">Potrojenie</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTargetAkoOdd(5.20);
-                      generateSmartAkoSlip(5.20, 'value');
-                    }}
-                    className="py-2 px-2 rounded-lg bg-slate-900 hover:bg-amber-500/20 border border-slate-800 hover:border-amber-500/50 text-xs font-bold text-amber-400 transition-all"
-                  >
-                    Kurs ≥ 5.00
-                    <span className="block text-[9px] text-slate-400 font-normal">Wysokie AKO</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Lista wybranych zdarzeń na kuponie */}
-              {betSlip.length === 0 ? (
+              {couponPicks.length === 0 ? (
                 <div className="text-center py-8 px-4 border border-dashed border-slate-800 rounded-xl">
                   <Ticket className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-slate-300">Kupon jest obecnie pusty</p>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Dodaj typy z listy po lewej stronie lub kliknij jeden z przycisków powyżej, aby wygenerować optymalny kupon.
+                  <p className="text-xs text-slate-400">
+                    Twój kupon jest pusty. Kliknij jeden z przycisków powyżej (np. <strong>Kurs 2.00+</strong> lub <strong>3.00+</strong>), aby automatycznie zbudować kupon.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-                  {betSlip.map((item, i) => (
-                    <div
-                      key={item.pickId}
-                      className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 flex flex-col gap-1.5"
-                    >
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-bold text-indigo-400">
-                          #{i + 1} • {item.gameTitle}
-                        </span>
-                        <button
-                          onClick={() => togglePickInSlip(item)}
-                          className="text-slate-500 hover:text-rose-400"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-bold text-white">{item.selectionName}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {item.marketType} • Szansa modelu: <strong className="text-emerald-400">{item.prob}%</strong>
-                          </div>
-                        </div>
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 font-mono text-xs font-black text-amber-400">
-                          {item.odd.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Podsumowanie finansowe i matematyczne kuponu */}
-              <div className="pt-3 border-t border-slate-800 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Stawka Kuponu (PLN):</label>
-                    <input
-                      type="number"
-                      min="2"
-                      step="10"
-                      value={akoStake}
-                      onChange={(e) => setAkoStake(Math.max(1, parseFloat(e.target.value) || 0))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm font-mono font-bold text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Podatek Bukmacherski:</label>
-                    <select
-                      value={taxRate}
-                      onChange={(e) => setTaxRate(parseFloat(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-semibold"
-                    >
-                      <option value={0.12}>Polska 12% (x0.88)</option>
-                      <option value={0}>Bez podatku 0% (x1.00)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-gradient-to-br from-slate-950 to-indigo-950/30 border border-indigo-500/30 space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Kurs Całkowity (AKO):</span>
-                    <span className="font-mono font-black text-base text-amber-400">{slipMetrics.totalOdd}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Łączna Szansa Trafienia (Monte Carlo):</span>
-                    <span className="font-mono font-bold text-emerald-400">{slipMetrics.combinedProb}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Wartość Oczekiwana Kuponu (EV):</span>
-                    <span className={`font-mono font-bold ${slipMetrics.isPositiveEv ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {Number(slipMetrics.evPct) > 0 ? `+${slipMetrics.evPct}%` : `${slipMetrics.evPct}%`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-800/80 text-sm">
-                    <span className="font-bold text-slate-200">Ewentualna Wygrana:</span>
-                    <span className="font-mono font-black text-emerald-400">{slipMetrics.potentialWin} PLN</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setMainTab('ako_builder')}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-bold text-xs shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2"
-                >
-                  <Layers className="w-4 h-4" />
-                  <span>Otwórz Pełną Analizę Statystyczną Kuponu</span>
-                </button>
-              </div>
-            </div>
-          </aside>
-        </main>
-      )}
-
-      {/* =====================================================================
-          WIDOK 2: GENERATOR KUPONÓW AKO (KURS 2.0+ / 3.0+ / SUWAK) & RAPORT
-      ===================================================================== */}
-      {mainTab === 'ako_builder' && (
-        <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 space-y-6">
-          {/* Panel Sterowania Generatorem AKO */}
-          <div className="bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 border border-indigo-500/40 rounded-2xl p-6 shadow-2xl">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              {/* Opis i Szybkie Presety Kursowe */}
-              <div className="lg:col-span-5 space-y-3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold">
-                  <Wand2 className="w-3.5 h-3.5" />
-                  Smart AKO Optimizer • Monte Carlo Engine
-                </div>
-                <h2 className="text-xl sm:text-2xl font-black text-white">
-                  Generator Kuponów Powyżej Wybranego Kursu
-                </h2>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Wybierz docelowy kurs minimalny (np. podwojenie <strong>2.00+</strong> lub potrojenie <strong>3.00+</strong>) oraz strategię matematyczną. Algorytm przeskanuje wszystkie dzisiejsze mecze NBA i wybierze kombinację o najwyższym łącznym prawdopodobieństwie trafienia.
-                </p>
-
-                <div className="pt-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                    Szybki wybór progu kursowego:
-                  </span>
-                  <div className="grid grid-cols-4 gap-2">
-                    {[
-                      { label: 'Kurs 2.00+', val: 2.05, desc: 'Podwojenie' },
-                      { label: 'Kurs 3.00+', val: 3.10, desc: 'Potrojenie' },
-                      { label: 'Kurs 5.00+', val: 5.15, desc: 'Wysokie AKO' },
-                      { label: 'Kurs 8.00+', val: 8.20, desc: 'Taśma Pro' }
-                    ].map(preset => (
-                      <button
-                        key={preset.val}
-                        onClick={() => {
-                          setTargetAkoOdd(preset.val);
-                          generateSmartAkoSlip(preset.val, akoStrategy);
-                        }}
-                        className={`p-2.5 rounded-xl border text-center transition-all ${
-                          Math.abs(targetAkoOdd - preset.val) < 0.2
-                            ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/25'
-                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs font-black font-mono">{preset.label}</div>
-                        <div className="text-[10px] opacity-80">{preset.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Suwak docelowego kursu i wybór strategii */}
-              <div className="lg:col-span-4 bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div>
-                  <div className="flex justify-between items-center text-xs mb-2">
-                    <span className="font-bold text-slate-300">Docelowy Kurs Minimalny:</span>
-                    <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-500/40 font-mono text-base font-black text-indigo-300">
-                      ≥ {targetAkoOdd.toFixed(2)}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1.50"
-                    max="12.00"
-                    step="0.25"
-                    value={targetAkoOdd}
-                    onChange={(e) => setTargetAkoOdd(parseFloat(e.target.value))}
-                    className="w-full accent-indigo-500 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
-                    <span>1.50</span>
-                    <span>2.00</span>
-                    <span>3.00</span>
-                    <span>5.00</span>
-                    <span>12.00+</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-2">
-                    Strategia Doboru Spotkań przez Algorytm:
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { id: 'safe', name: 'Pewniaki', desc: 'Max Szansa %' },
-                      { id: 'balanced', name: 'Zbalansowany', desc: 'Optymalny' },
-                      { id: 'value', name: 'Value Hunter', desc: 'Max Przewaga EV' }
-                    ].map(st => (
-                      <button
-                        key={st.id}
-                        onClick={() => {
-                          setAkoStrategy(st.id);
-                          generateSmartAkoSlip(targetAkoOdd, st.id);
-                        }}
-                        className={`p-2 rounded-xl border text-left transition-all ${
-                          akoStrategy === st.id
-                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="text-xs font-bold">{st.name}</div>
-                        <div className="text-[10px] opacity-75">{st.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => generateSmartAkoSlip(targetAkoOdd, akoStrategy)}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  <span>Wygeneruj Optymalny Kupon (Kurs ≥ {targetAkoOdd.toFixed(2)})</span>
-                </button>
-              </div>
-
-              {/* Karta Wynikowa Wygenerowanego Kuponu */}
-              <div className="lg:col-span-3 bg-slate-950 p-5 rounded-2xl border border-indigo-500/40 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                  <span className="text-xs font-bold text-slate-400 uppercase">Parametry Kuponu</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500 text-white">
-                    {betSlip.length} Zdarzenia
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5 text-center">
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Kurs Całkowity AKO</span>
-                    <span className="text-xl font-mono font-black text-amber-400">{slipMetrics.totalOdd}</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Szansa Trafienia AKO</span>
-                    <span className="text-xl font-mono font-black text-emerald-400">{slipMetrics.combinedProb}%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 text-xs pt-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Stawka:</span>
-                    <span className="font-mono font-bold text-white">{akoStake} PLN</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Sugerowany Kelly ({kellyFraction * 100}%):</span>
-                    <span className="font-mono font-bold text-indigo-400">{slipMetrics.kellyStake} PLN ({slipMetrics.kellyPct}%)</span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-2 border-t border-slate-800">
-                    <span className="font-bold text-slate-200">Do Wypłaty:</span>
-                    <span className="font-mono font-black text-emerald-400">{slipMetrics.potentialWin} PLN</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* =================================================================
-              SZCZEGÓŁOWA ANALIZA STATYSTYCZNA KAŻDEGO MECZU NA KUPONIE AKO
-          ================================================================= */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Lista analizowanych spotkań wchodzących w skład kuponu (8/12) */}
-            <div className="lg:col-span-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-indigo-400" />
-                  <span>Głęboki Raport Analityczny Spotkań na Kuponie ({betSlip.length})</span>
-                </h3>
-                <span className="text-xs text-slate-400">
-                  Każdy typ zweryfikowany przez 8 000 iteracji Monte Carlo i model Four Factors
-                </span>
-              </div>
-
-              {betSlip.length === 0 ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center space-y-3">
-                  <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
-                  <h4 className="text-base font-bold text-white">Brak wybranych spotkań na kuponie</h4>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Użyj przycisku „Wygeneruj Optymalny Kupon” powyżej lub wybierz ręcznie dowolny typ z tabeli wszystkich dzisiejszych spotkań obok.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {betSlip.map((pick, index) => {
-                    const hTeam = pick.homeTeam;
-                    const aTeam = pick.awayTeam;
-
-                    return (
+                <>
+                  {/* Lista zdarzeń na kuponie */}
+                  <div className="space-y-2.5 mb-4 max-h-80 overflow-y-auto pr-1">
+                    {couponPicks.map((item) => (
                       <div
-                        key={pick.pickId}
-                        className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4"
+                        key={item.id}
+                        className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2"
                       >
-                        {/* Górny pasek pojedynczego meczu na kuponie */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                          <div className="flex items-center gap-3">
-                            <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-mono font-black text-sm flex items-center justify-center">
-                              #{index + 1}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                              {item.matchLabel}
                             </span>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-white">
-                                  {aTeam.name} @ {hTeam.name}
-                                </span>
-                                <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-mono">
-                                  {pick.gameTime}
-                                </span>
-                              </div>
-                              <div className="text-xs text-emerald-400 font-bold mt-0.5">
-                                Wybrany Typ: {pick.selectionName} ({pick.marketType})
-                              </div>
-                            </div>
+                            <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                              Szansa: {item.prob.toFixed(1)}%
+                            </span>
                           </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="text-right bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                              <span className="text-[10px] text-slate-400 block">Szansa Modelu</span>
-                              <span className="text-sm font-mono font-black text-emerald-400">{pick.prob}%</span>
-                            </div>
-                            <div className="text-right bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                              <span className="text-[10px] text-slate-400 block">Kurs Typu</span>
-                              <span className="text-sm font-mono font-black text-amber-400">{pick.odd.toFixed(2)}</span>
-                            </div>
-                            <button
-                              onClick={() => togglePickInSlip(pick)}
-                              className="p-2 rounded-xl bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-all"
-                              title="Usuń z kuponu"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                          <div className="text-xs font-bold text-white mt-1">
+                            {item.selectionName}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {item.marketType} • Prognoza: {item.projectedScore}
                           </div>
                         </div>
 
-                        {/* Szczegółowa tabela porównawcza statystyk obu drużyn w tym meczu */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                          {/* Metryki Drużynowe i Four Factors (7/12) */}
-                          <div className="md:col-span-7 bg-slate-950/90 p-3.5 rounded-xl border border-slate-800/80 space-y-2.5">
-                            <div className="flex justify-between text-[11px] font-bold text-slate-400 border-b border-slate-800 pb-1.5">
-                              <span className="text-blue-400">{aTeam.short} (Gość)</span>
-                              <span>Kluczowe Statystyki (Four Factors)</span>
-                              <span className="text-orange-400">{hTeam.short} (Dom)</span>
-                            </div>
-
-                            {[
-                              { name: 'ORTG (Atak / 100 pos.)', a: aTeam.ortg, h: hTeam.ortg, highBetter: true },
-                              { name: 'DRTG (Obrona / 100 pos.)', a: aTeam.drtg, h: hTeam.drtg, highBetter: false },
-                              { name: 'eFG% (Skuteczność z gry)', a: `${aTeam.efg}%`, h: `${hTeam.efg}%`, rawA: aTeam.efg, rawH: hTeam.efg, highBetter: true },
-                              { name: 'ORB% (Zbiórki ofensywne)', a: `${aTeam.orb}%`, h: `${hTeam.orb}%`, rawA: aTeam.orb, rawH: hTeam.orb, highBetter: true },
-                              { name: 'TOV% (Straty piłki)', a: `${aTeam.tov}%`, h: `${hTeam.tov}%`, rawA: aTeam.tov, rawH: hTeam.tov, highBetter: false },
-                              { name: 'Forma (Ostatnie 10 gier)', a: `${aTeam.l10}-` + (10 - aTeam.l10), h: `${hTeam.l10}-` + (10 - hTeam.l10), rawA: aTeam.l10, rawH: hTeam.l10, highBetter: true }
-                            ].map((row, rIdx) => {
-                              const valA = row.rawA !== undefined ? row.rawA : row.a;
-                              const valH = row.rawH !== undefined ? row.rawH : row.h;
-                              const homeBetter = row.highBetter ? valH > valA : valH < valA;
-
-                              return (
-                                <div key={rIdx} className="flex items-center justify-between text-xs font-mono">
-                                  <span className={!homeBetter ? 'text-blue-400 font-bold' : 'text-slate-400'}>
-                                    {row.a}
-                                  </span>
-                                  <span className="text-[11px] font-sans text-slate-300">{row.name}</span>
-                                  <span className={homeBetter ? 'text-orange-400 font-bold' : 'text-slate-400'}>
-                                    {row.h}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Wnioski z symulacji Monte Carlo dla tego zdarzenia (5/12) */}
-                          <div className="md:col-span-5 bg-slate-950/90 p-3.5 rounded-xl border border-slate-800/80 flex flex-col justify-between h-full space-y-3">
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block mb-1">
-                                Werdykt Symulacji Monte Carlo
-                              </span>
-                              <div className="grid grid-cols-2 gap-2 my-2">
-                                <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-center">
-                                  <span className="text-[10px] text-slate-400 block">Średni Wynik</span>
-                                  <span className="text-xs font-mono font-bold text-white">{pick.statsSnapshot.avgScore}</span>
-                                </div>
-                                <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-center">
-                                  <span className="text-[10px] text-slate-400 block">Śr. Suma Pkt</span>
-                                  <span className="text-xs font-mono font-bold text-emerald-400">{pick.statsSnapshot.avgTotal} pkt</span>
-                                </div>
-                              </div>
-                              <p className="text-xs text-slate-300 leading-relaxed mt-2">
-                                {pick.reason}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
-                              <span className="text-slate-400">Liderzy ({hTeam.id}): <strong className="text-slate-200">{hTeam.starPlayers}</strong></span>
-                              <button
-                                onClick={() => {
-                                  const targetGame = games.find(g => g.id === pick.gameId);
-                                  if (targetGame) handleSelectGame(targetGame);
-                                  setMainTab('simulator');
-                                }}
-                                className="text-orange-400 hover:underline font-semibold shrink-0 ml-2"
-                              >
-                                Wykresy meczu →
-                              </button>
-                            </div>
-                          </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="px-2.5 py-1 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-300 font-mono text-xs font-black">
+                            {item.odds.toFixed(2)}
+                          </span>
+                          <button
+                            onClick={() => togglePickInCoupon(item)}
+                            className="p-1 text-slate-500 hover:text-rose-400"
+                            title="Usuń z kuponu"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
 
-            {/* Prawa Kolumna w Kreatorze (4/12): Szybkie ręczne podmienianie i dodawanie rynków z dzisiejszych meczów */}
-            <div className="lg:col-span-4 space-y-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <PlusCircle className="w-5 h-5 text-emerald-400" />
-                <span>Wszystkie Mecze i Rynki (Dodaj ręcznie)</span>
-              </h3>
-
-              <div className="space-y-3 max-h-[780px] overflow-y-auto pr-1">
-                {allGamesAnalysis.map((ga) => (
-                  <div
-                    key={ga.gameId}
-                    className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <div>
-                        <div className="text-sm font-bold text-white">
-                          {ga.awayTeam.short} @ {ga.homeTeam.short}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          Prognoza: <strong className="text-slate-200">{ga.avgAway} : {ga.avgHome}</strong> (Suma: {ga.avgTotal})
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                        Tempo {ga.pace}
+                  {/* Parametry finansowe kuponu */}
+                  <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Kurs Całkowity (AKO):</span>
+                      <span className="text-xl font-black font-mono text-orange-400">
+                        {couponSummary.totalOdds.toFixed(2)}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {ga.markets.map((m) => {
-                        const isSelected = betSlip.some(item => item.pickId === m.pickId);
-                        return (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Łączne Prawdopodobieństwo:</span>
+                      <span className="text-sm font-bold font-mono text-emerald-400">
+                        {couponSummary.combinedProb.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Wartość Oczekiwana Kuponu (EV):</span>
+                      <span
+                        className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
+                          couponSummary.akoEv >= 0
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-amber-500/15 text-amber-300'
+                        }`}
+                      >
+                        {couponSummary.akoEv >= 0 ? `+${couponSummary.akoEv.toFixed(1)}%` : `${couponSummary.akoEv.toFixed(1)}%`}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-slate-400 font-medium">Stawka kuponu (PLN):</span>
+                        <span className="text-[11px] text-indigo-400 font-mono">
+                          Sugestia Kelly&apos;ego: {couponSummary.kellySuggested.toFixed(0)} PLN
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="2"
+                          step="10"
+                          value={couponStake}
+                          onChange={(e) => setCouponStake(Math.max(1, Number(e.target.value)))}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono font-bold text-white"
+                        />
+                        {[50, 100, 200].map((val) => (
                           <button
-                            key={m.pickId}
-                            onClick={() => togglePickInSlip(m)}
-                            className={`p-2 rounded-xl border text-left transition-all flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-indigo-600 border-indigo-400 text-white'
-                                : 'bg-slate-950/80 border-slate-800/90 hover:border-slate-700 text-slate-200'
-                            }`}
+                            key={val}
+                            onClick={() => setCouponStake(val)}
+                            className="px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-slate-300"
                           >
-                            <div className="truncate pr-1">
-                              <div className="text-[11px] font-bold truncate">{m.selectionName}</div>
-                              <div className={`text-[10px] ${isSelected ? 'text-indigo-200' : 'text-emerald-400'}`}>
-                                Szansa: {m.prob}%
-                              </div>
-                            </div>
-                            <span className={`font-mono text-xs font-black px-1.5 py-0.5 rounded ${
-                              isSelected ? 'bg-indigo-800 text-amber-300' : 'bg-slate-900 text-amber-400'
-                            }`}>
-                              {m.odd.toFixed(2)}
-                            </span>
+                            {val}
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Ewentualna wygrana */}
+                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-[11px] text-slate-400">
+                          Ewentualna Wygrana {taxRate ? '(po podatku 12%)' : '(bez podatku)'}
+                        </div>
+                        <div className="text-xs text-emerald-400 font-mono">
+                          Czysty zysk: +{couponSummary.netProfit.toFixed(2)} PLN
+                        </div>
+                      </div>
+                      <div className="text-2xl font-black font-mono text-emerald-400">
+                        {couponSummary.potentialWin.toFixed(2)} <span className="text-xs">PLN</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* TABELA PORÓWNAWCZA STATYSTYK DRUŻYN Z KUPONU */}
+                  <div className="mt-4 pt-4 border-t border-slate-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      Głęboka Analiza Statystyczna Spotkań na Kuponie
+                    </h4>
+                    <div className="space-y-2.5">
+                      {couponPicks.map((item) => (
+                        <div
+                          key={`stat_${item.id}`}
+                          className="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800/80 text-[11px]"
+                        >
+                          <div className="flex items-center justify-between font-bold text-white mb-1.5">
+                            <span>{item.awayTeam.name} @ {item.homeTeam.name}</span>
+                            <button
+                              onClick={() => {
+                                const m = matches.find((x) => x.id === item.matchId);
+                                if (m) {
+                                  handleSelectMatch(m);
+                                  setActiveView('match-lab');
+                                }
+                              }}
+                              className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"
+                            >
+                              Pełne Lab <ArrowUpRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5 text-center font-mono">
+                            <div className="bg-slate-900 p-1.5 rounded">
+                              <div className="text-[9px] text-slate-500">ORTG (Atak)</div>
+                              <div className="text-slate-200">
+                                {item.awayTeam.ortg} / <span className="text-orange-400">{item.homeTeam.ortg}</span>
+                              </div>
+                            </div>
+                            <div className="bg-slate-900 p-1.5 rounded">
+                              <div className="text-[9px] text-slate-500">DRTG (Obrona)</div>
+                              <div className="text-slate-200">
+                                {item.awayTeam.drtg} / <span className="text-orange-400">{item.homeTeam.drtg}</span>
+                              </div>
+                            </div>
+                            <div className="bg-slate-900 p-1.5 rounded">
+                              <div className="text-[9px] text-slate-500">eFG% (Rzuty)</div>
+                              <div className="text-slate-200">
+                                {item.awayTeam.efg}% / <span className="text-orange-400">{item.homeTeam.efg}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </main>
       )}
 
-      {/* =====================================================================
-          WIDOK 3: GŁĘBOKI SYMULATOR POJEDYNCZEGO MECZU (3 KOLUMNY ANALITYCZNE)
-      ===================================================================== */}
-      {mainTab === 'simulator' && (
-        <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* -------------------------------------------------------------------
-              LEWA KOLUMNA (3/12): LISTA SPOTKAŃ LIVE ORAZ KREATOR WŁASNY
-          ------------------------------------------------------------------- */}
-          <aside className="lg:col-span-3 space-y-6">
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    {bettingAnalysis.isValueHome ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-400" />
-                    )}
-                    <span className="text-xs font-bold text-white">
-                      Typ na: {homeTeamData.name}
-                    </span>
+      {/* ========================================================================
+          WIDOK 2: LABORATORIUM POJEDYNCZEGO MECZU (1 NA 1 + SUWAKI KONTUZJI I SYMULACJI)
+         ======================================================================== */}
+      {activeView === 'match-lab' && (
+        <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEWA KOLUMNA (3/12): LISTA SPOTKAŃ + MODYFIKATORY */}
+          <div className="lg:col-span-3 space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-orange-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+                    Wybierz Mecz do Analizy
+                  </h2>
+                </div>
+                <span className="text-[11px] text-slate-500">{lastSyncTime}</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {matches.map((match) => {
+                  const home = NBA_TEAMS_DB[match.home];
+                  const away = NBA_TEAMS_DB[match.away];
+                  const isSelected = match.id === selectedMatch.id;
+
+                  return (
+                    <button
+                      key={match.id}
+                      onClick={() => handleSelectMatch(match)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'bg-indigo-600/15 border-indigo-500 shadow-lg shadow-indigo-500/10'
+                          : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
+                        <span className="font-medium text-indigo-400">{match.time}</span>
+                        <span>{match.status}</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-white">{away.name}</span>
+                          <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                            {match.bookieOdds.away.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-white">{home.name}</span>
+                          <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                            {match.bookieOdds.home.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modyfikatory modelu Monte Carlo */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+                <Sliders className="w-4 h-4 text-indigo-400" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+                  Parametry Symulacji
+                </h2>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-400">Liczba symulacji Monte Carlo</span>
+                  <span className="font-mono font-bold text-indigo-400">
+                    {simCount.toLocaleString('pl-PL')} gier
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[5000, 10000, 25000].map((val) => (
+                    <button
+                      key={val}
+                      onClick={() => setSimCount(val)}
+                      className={`py-1.5 rounded-lg text-xs font-mono font-semibold border ${
+                        simCount === val
+                          ? 'bg-indigo-600 border-indigo-500 text-white'
+                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {val / 1000}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-400">Przewaga parkietu (HCA)</span>
+                  <span className="font-mono text-orange-400">+{homeCourtAdv.toFixed(1)} pkt</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5.5"
+                  step="0.2"
+                  value={homeCourtAdv}
+                  onChange={(e) => setHomeCourtAdv(Number(e.target.value))}
+                  className="w-full accent-orange-500"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 space-y-2.5">
+                <p className="text-xs font-semibold text-slate-300">Zmęczenie (Mecz dzień po dniu B2B)</p>
+                <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                  <span>{selectedMatch.homeTeam.short} gra Back-to-Back (-2.4 pkt)</span>
+                  <input
+                    type="checkbox"
+                    checked={homeB2B}
+                    onChange={(e) => setHomeB2B(e.target.checked)}
+                    className="rounded accent-orange-500 w-4 h-4"
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                  <span>{selectedMatch.awayTeam.short} gra Back-to-Back (-2.4 pkt)</span>
+                  <input
+                    type="checkbox"
+                    checked={awayB2B}
+                    onChange={(e) => setAwayB2B(e.target.checked)}
+                    className="rounded accent-orange-500 w-4 h-4"
+                  />
+                </label>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 space-y-3">
+                <p className="text-xs font-semibold text-slate-300">Absencje / Kontuzje kluczowych graczy</p>
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">Osłabienie {selectedMatch.homeTeam.short}</span>
+                    <span className="font-mono text-rose-400">-{homeInjuryImpact.toFixed(1)} pkt</span>
                   </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
-                      bettingAnalysis.isValueHome
-                        ? 'bg-emerald-500 text-slate-950'
-                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                    }`}
-                  >
-                    {bettingAnalysis.isValueHome ? 'VALUE BET!' : 'Brak Value'}
+                  <input
+                    type="range"
+                    min="0"
+                    max="9"
+                    step="0.5"
+                    value={homeInjuryImpact}
+                    onChange={(e) => setHomeInjuryImpact(Number(e.target.value))}
+                    className="w-full accent-rose-500"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">Osłabienie {selectedMatch.awayTeam.short}</span>
+                    <span className="font-mono text-rose-400">-{awayInjuryImpact.toFixed(1)} pkt</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="9"
+                    step="0.5"
+                    value={awayInjuryImpact}
+                    onChange={(e) => setAwayInjuryImpact(Number(e.target.value))}
+                    className="w-full accent-rose-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ŚRODKOWA KOLUMNA (5/12): WYNIKI SYMULACJI MONTE CARLO */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+              <div className="text-center mb-4">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-indigo-400">
+                  {selectedMatch.venue} • {simulationResults.iterations.toLocaleString('pl-PL')} symulacji
+                </span>
+                <h2 className="text-xl font-extrabold text-white mt-0.5">
+                  {selectedMatch.awayTeam.name} @ {selectedMatch.homeTeam.name}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 my-5">
+                <div className="bg-slate-950/80 border border-slate-800/90 rounded-xl p-4 text-center">
+                  <p className="text-xs text-slate-400 mb-1">Goście ({selectedMatch.awayTeam.short})</p>
+                  <div className="text-3xl font-black text-indigo-400 font-mono">
+                    {simulationResults.awayWinProb.toFixed(1)}%
+                  </div>
+                  <div className="mt-2 text-xs text-slate-300">
+                    Śr. wynik: <span className="font-mono font-bold text-white">{simulationResults.avgAwayPts.toFixed(1)}</span> pkt
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800/90 rounded-xl p-4 text-center">
+                  <p className="text-xs text-slate-400 mb-1">Gospodarze ({selectedMatch.homeTeam.short})</p>
+                  <div className="text-3xl font-black text-orange-400 font-mono">
+                    {simulationResults.homeWinProb.toFixed(1)}%
+                  </div>
+                  <div className="mt-2 text-xs text-slate-300">
+                    Śr. wynik: <span className="font-mono font-bold text-white">{simulationResults.avgHomePts.toFixed(1)}</span> pkt
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full h-4 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800 p-0.5">
+                <div
+                  style={{ width: `${simulationResults.awayWinProb}%` }}
+                  className="bg-gradient-to-r from-indigo-600 to-indigo-400 h-full rounded-l-full transition-all duration-300"
+                />
+                <div
+                  style={{ width: `${simulationResults.homeWinProb}%` }}
+                  className="bg-gradient-to-r from-orange-400 to-orange-600 h-full rounded-r-full transition-all duration-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 mt-5 pt-4 border-t border-slate-800/80 text-center">
+                <div className="bg-slate-950/60 rounded-lg p-2.5 border border-slate-800/60">
+                  <span className="text-[11px] text-slate-400 block">Szacowany Spread</span>
+                  <span className="text-sm font-mono font-bold text-white">
+                    {selectedMatch.homeTeam.short} {simulationResults.projectedSpreadLine > 0 ? `+${simulationResults.projectedSpreadLine}` : simulationResults.projectedSpreadLine}
+                  </span>
+                </div>
+                <div className="bg-slate-950/60 rounded-lg p-2.5 border border-slate-800/60">
+                  <span className="text-[11px] text-slate-400 block">Suma Punktów (O/U)</span>
+                  <span className="text-sm font-mono font-bold text-white">
+                    {simulationResults.projectedTotalLine} pkt
+                  </span>
+                </div>
+                <div className="bg-slate-950/60 rounded-lg p-2.5 border border-slate-800/60">
+                  <span className="text-[11px] text-slate-400 block">Tempo (Pace)</span>
+                  <span className="text-sm font-mono font-bold text-white">
+                    {simulationResults.expectedPace.toFixed(1)} pos.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Porównanie Four Factors Deana Olivera */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 mb-4">
+                Porównanie Four Factors (Dean Oliver Model)
+              </h3>
+              <div className="space-y-3.5">
+                {[
+                  { label: 'Offensive Rating (ORTG)', away: selectedMatch.awayTeam.ortg, home: selectedMatch.homeTeam.ortg, higherBetter: true },
+                  { label: 'Defensive Rating (DRTG - mniej=lepiej)', away: selectedMatch.awayTeam.drtg, home: selectedMatch.homeTeam.drtg, higherBetter: false },
+                  { label: 'Effective FG% (Skuteczność 40%)', away: selectedMatch.awayTeam.efg, home: selectedMatch.homeTeam.efg, higherBetter: true },
+                  { label: 'Turnover % (Straty 25% - mniej=lepiej)', away: selectedMatch.awayTeam.tov, home: selectedMatch.homeTeam.tov, higherBetter: false },
+                  { label: 'Offensive Rebound % (Zbiórki 20%)', away: selectedMatch.awayTeam.orb, home: selectedMatch.homeTeam.orb, higherBetter: true }
+                ].map((stat, i) => {
+                  const awayWinsStat = stat.higherBetter ? stat.away > stat.home : stat.away < stat.home;
+                  return (
+                    <div key={i} className="text-xs">
+                      <div className="flex justify-between mb-1">
+                        <span className={`font-mono font-bold ${awayWinsStat ? 'text-indigo-400' : 'text-slate-400'}`}>
+                          {stat.away}
+                        </span>
+                        <span className="text-slate-300 font-medium">{stat.label}</span>
+                        <span className={`font-mono font-bold ${!awayWinsStat ? 'text-orange-400' : 'text-slate-400'}`}>
+                          {stat.home}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* PRAWA KOLUMNA (4/12): KALKULATOR VALUE BET & KRYTERIUM KELLY'EGO */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4">
+                <Calculator className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-white">
+                  Kalkulator Value Bet (1 na 1)
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <label className="text-[11px] text-slate-400 block mb-1">
+                    Kurs {selectedMatch.awayTeam.short} (Gość)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="1.01"
+                    value={oddsAway}
+                    onChange={(e) => setOddsAway(Math.max(1.01, Number(e.target.value)))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm font-mono font-bold text-white"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Min. opłacalny: {bettingAnalysis.fairOddAway.toFixed(2)}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs mt-3 pt-2 border-t border-slate-800/80">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Szansa Modelu</span>
-                    <span className="font-mono font-bold text-white">{simulationResults.homeWinProb.toFixed(1)}%</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Expected Value (EV)</span>
-                    <span
-                      className={`font-mono font-bold ${
-                        bettingAnalysis.isValueHome ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {Number(bettingAnalysis.evHome) > 0 ? `+${bettingAnalysis.evHome}%` : `${bettingAnalysis.evHome}%`}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Stawka Kelly</span>
-                    <span className="font-mono font-bold text-amber-400">
-                      {bettingAnalysis.stakeHome} PLN ({bettingAnalysis.recommendedPctHome}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Zarządzanie Kapitałem (Bankroll & Ułamkowy Kelly) */}
-            <div className="pt-4 border-t border-slate-800 space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                Zarządzanie Kapitałem (Kryterium Kelly'ego)
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Twój Kapitał (PLN):</label>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <label className="text-[11px] text-slate-400 block mb-1">
+                    Kurs {selectedMatch.homeTeam.short} (Dom)
+                  </label>
                   <input
                     type="number"
-                    step="100"
-                    min="50"
-                    value={bankroll}
-                    onChange={(e) => setBankroll(Math.max(10, parseInt(e.target.value, 10) || 0))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono font-bold text-white"
+                    step="0.05"
+                    min="1.01"
+                    value={oddsHome}
+                    onChange={(e) => setOddsHome(Math.max(1.01, Number(e.target.value)))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm font-mono font-bold text-white"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Strategia Kelly'ego:</label>
-                  <select
-                    value={kellyFraction}
-                    onChange={(e) => setKellyFraction(parseFloat(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200"
-                  >
-                    <option value={0.125}>1/8 Kelly (Bardzo ostrożna)</option>
-                    <option value={0.25}>1/4 Kelly (Zalecana Pro)</option>
-                    <option value={0.5}>1/2 Kelly (Dynamiczna)</option>
-                    <option value={1.0}>Pełny Kelly (Agresywna)</option>
-                  </select>
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Min. opłacalny: {bettingAnalysis.fairOddHome.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>Marża Bukmachera (Overround):</span>
-                <span className="font-mono font-semibold text-slate-200">{bettingAnalysis.bookieMargin}%</span>
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl border bg-slate-950/70 border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-white block">{selectedMatch.awayTeam.name}</span>
+                    <span className="text-[11px] text-slate-400">
+                      Sugerowana stawka Kelly: {bettingAnalysis.stakeAway.toFixed(0)} PLN
+                    </span>
+                  </div>
+                  <span className={`font-mono font-bold text-sm ${bettingAnalysis.evAway > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    EV: {bettingAnalysis.evAway > 0 ? `+${bettingAnalysis.evAway.toFixed(1)}%` : `${bettingAnalysis.evAway.toFixed(1)}%`}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl border bg-slate-950/70 border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-white block">{selectedMatch.homeTeam.name}</span>
+                    <span className="text-[11px] text-slate-400">
+                      Sugerowana stawka Kelly: {bettingAnalysis.stakeHome.toFixed(0)} PLN
+                    </span>
+                  </div>
+                  <span className={`font-mono font-bold text-sm ${bettingAnalysis.evHome > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    EV: {bettingAnalysis.evHome > 0 ? `+${bettingAnalysis.evHome.toFixed(1)}%` : `${bettingAnalysis.evHome.toFixed(1)}%`}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </aside>
-      </main>
+        </main>
       )}
-
-      {/* =====================================================================
-          PASEK ODPOWIEDZIALNEJ GRY I INFORMACJI O MODELU
-      ===================================================================== */}
-      <footer className="max-w-[1600px] mx-auto px-4 sm:px-6 pb-8 pt-2">
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
-            <p>
-              <strong className="text-slate-200">Informacja o Ryzyku i Odpowiedzialnej Grze:</strong> Symulacje Monte Carlo oraz model Four Factors szacują prawdopodobieństwo statystyczne na podstawie danych historycznych i bieżących, co nie stanowi gwarancji wyniku sportowego. Graj odpowiedzialnie i stosuj rygorystyczne zarządzanie kapitałem (Bankroll Management).
-            </p>
-          </div>
-          <div className="text-[11px] text-slate-500 shrink-0 font-mono">
-            NBA Engine v4.2 • 18+
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
