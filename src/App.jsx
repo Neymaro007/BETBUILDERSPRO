@@ -67,10 +67,14 @@ function americanToDecimal(amOdds) {
   return Number((1 + 100 / Math.abs(n)).toFixed(2));
 }
 
+function clamp(val, min, max) {
+  return Math.min(max, Math.max(min, val));
+}
+
 function hashStrength(nameStr) {
   let h = 0;
   for (let i = 0; i < nameStr.length; i++) h = (h * 31 + nameStr.charCodeAt(i)) % 1000;
-  return 0.44 + (h / 1000) * 0.16;
+  return 0.45 + (h / 1000) * 0.14;
 }
 
 function parseRecordString(recStr) {
@@ -79,6 +83,7 @@ function parseRecordString(recStr) {
   if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     const games = parts.reduce((a, b) => a + (isNaN(b) ? 0 : b), 0);
     if (games > 0) {
+      // W NHL bilans to W-L-OTL (np. 8-4-1, gdzie 1 to porażka po dogrywce warta ~0.35 punktu siły)
       const wins = parts[0] + (parts[2] ? parts[2] * 0.35 : 0);
       return { wins: parts[0], losses: parts[1], ties: parts[2] || 0, games, pct: wins / games };
     }
@@ -87,13 +92,12 @@ function parseRecordString(recStr) {
 }
 
 // ============================================================================
-// GŁĘBOKI PARSER TELEMETRII ZESPOŁU (5 FILARÓW ANALITYCZNYCH Z API ESPN)
+// NAPRAWIONY PARSER TELEMETRII (Z walidacją jednostek meczowych per-game!)
 // ============================================================================
 function parseCompetitorStats(comp, cfg, isHome = true) {
   const name = comp.team?.displayName || comp.team?.name || comp.athlete?.displayName || 'Zespół';
   const short = comp.team?.abbreviation || name.slice(0, 3).toUpperCase();
 
-  // 1. Bilans ogólny + Bilans Dom / Wyjazd (Home/Road Splits)
   const recordsArr = comp.records || [];
   const totalRecObj = recordsArr.find((r) => r.type === 'total' || r.name === 'overall') || recordsArr[0];
   const homeRecObj = recordsArr.find((r) => r.type === 'home' || r.name === 'Home');
@@ -105,58 +109,64 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   const rawWinPct = parsedTotal.pct !== null ? parsedTotal.pct : hashStrength(name);
   const gamesPlayed = parsedTotal.games;
 
-  // Stabilizacja Bayesowska (ochrona przed małą próbą na starcie sezonu)
-  const kPrior = cfg.sport === 'BASKETBALL' ? 14 : cfg.sport === 'HOCKEY' ? 12 : 8;
+  // Stabilizacja Bayesowska (k=14 meczów stabilizujących)
+  const kPrior = cfg.sport === 'BASKETBALL' ? 14 : cfg.sport === 'HOCKEY' ? 14 : 10;
   const bayesianWinPct = gamesPlayed > 0
     ? (rawWinPct * gamesPlayed + 0.50 * kPrior) / (gamesPlayed + kPrior)
     : rawWinPct;
 
-  // Uwzględnienie specyfiki Dom/Wyjazd (jeśli dostępne w API)
-  const splitFactor = parsedSplit.pct !== null && parsedSplit.games >= 2
-    ? (parsedSplit.pct - rawWinPct) * 0.35
+  const splitFactor = parsedSplit.pct !== null && parsedSplit.games >= 3
+    ? clamp((parsedSplit.pct - rawWinPct) * 0.25, -0.06, 0.06)
     : 0;
 
-  // 2. Wyciąganie zaawansowanych statystyk z tablicy comp.statistics (FG%, 3P%, REB, AST, TOV, Goals)
   const statsMap = {};
   (comp.statistics || []).forEach((s) => {
     const key = (s.name || s.abbreviation || '').toLowerCase();
     statsMap[key] = parseFloat(s.displayValue);
   });
 
-  const fgPct = statsMap.fieldgoalpct || statsMap.fgp || (45.0 + (bayesianWinPct - 0.5) * 10);
-  const threePct = statsMap.threepointfieldgoalpct || statsMap.threepointpct || statsMap['3p%'] || (35.0 + (bayesianWinPct - 0.5) * 8);
-  // Effective Field Goal % (kluczowy czynnik Deana Olivera - waga 40%)
-  const efgPct = Number((fgPct + 0.5 * (threePct * 0.38)).toFixed(1));
+  // NAPRAWA BŁĘDU "128 : 3.1": Nigdy nie bierzemy surowego "points" (łącznych punktów z sezonu) jako średniej na mecz!
+  let avgPtsFor = cfg.avgScore * (0.92 + (bayesianWinPct + splitFactor - 0.50) * 0.32);
+  let avgPtsAgainst = cfg.avgScore * (1.08 - (bayesianWinPct + splitFactor - 0.50) * 0.32);
 
-  const rebounds = statsMap.rebounds || statsMap.avgRebounds || statsMap.reb || (43.0 + (bayesianWinPct - 0.5) * 6);
-  const assists = statsMap.assists || statsMap.avgAssists || statsMap.ast || (24.5 + (bayesianWinPct - 0.5) * 5);
-  const turnovers = statsMap.turnovers || statsMap.avgTurnovers || statsMap.tov || (13.8 - (bayesianWinPct - 0.5) * 3);
+  if (cfg.sport === 'BASKETBALL') {
+    const rawPpg = statsMap.avgpoints || statsMap.ppg;
+    if (rawPpg && rawPpg > 55 && rawPpg < 140) avgPtsFor = rawPpg;
+    avgPtsFor = clamp(avgPtsFor, cfg.avgScore * 0.85, cfg.avgScore * 1.15);
+    avgPtsAgainst = clamp(avgPtsAgainst, cfg.avgScore * 0.85, cfg.avgScore * 1.15);
+  } else if (cfg.sport === 'HOCKEY') {
+    const rawGpg = statsMap.avggoals || (statsMap.goals && gamesPlayed > 0 ? statsMap.goals / gamesPlayed : null);
+    if (rawGpg && rawGpg > 1.5 && rawGpg < 5.0) avgPtsFor = rawGpg;
+    avgPtsFor = clamp(avgPtsFor, 2.20, 4.00);
+    avgPtsAgainst = clamp(avgPtsAgainst, 2.20, 4.00);
+  } else if (cfg.sport === 'SOCCER') {
+    const rawGpg = statsMap.avggoals || (statsMap.goalsfor && gamesPlayed > 0 ? statsMap.goalsfor / gamesPlayed : null);
+    if (rawGpg && rawGpg > 0.4 && rawGpg < 3.5) avgPtsFor = rawGpg;
+    avgPtsFor = clamp(avgPtsFor, 0.80, 2.50);
+    avgPtsAgainst = clamp(avgPtsAgainst, 0.75, 2.40);
+  }
 
-  // 3. Oczekiwana Siła Pitagorejska (Pythagorean Expectation z punktów zdobytych i straconych)
-  const avgPtsFor = statsMap.avgpoints || statsMap.points || statsMap.goalsfor || cfg.avgScore * (0.91 + (bayesianWinPct + splitFactor) * 0.18);
-  const avgPtsAgainst = statsMap.avgpointsagainst || statsMap.goalsagainst || cfg.avgScore * (1.09 - (bayesianWinPct + splitFactor) * 0.18);
+  // Oczekiwana Siła Pitagorejska (zawsze w realistycznym przedziale 28% - 72%)
+  const expGamma = cfg.sport === 'BASKETBALL' ? 11.5 : 2.0;
+  const rawPyth = Math.pow(avgPtsFor, expGamma) / (Math.pow(avgPtsFor, expGamma) + Math.pow(avgPtsAgainst, expGamma));
+  const pythagoreanWinPct = clamp(rawPyth, 0.28, 0.72);
 
-  const expGamma = cfg.sport === 'BASKETBALL' ? 13.91 : 2.0;
-  const pythagoreanWinPct =
-    Math.pow(avgPtsFor, expGamma) /
-    (Math.pow(avgPtsFor, expGamma) + Math.pow(avgPtsAgainst, expGamma));
+  // Four Factors / Skuteczność
+  const fgPct = clamp(statsMap.fieldgoalpct || statsMap.fgp || (45.5 + (bayesianWinPct - 0.5) * 8), 38.0, 56.0);
+  const threePct = clamp(statsMap.threepointfieldgoalpct || statsMap.threepointpct || (35.5 + (bayesianWinPct - 0.5) * 6), 28.0, 44.0);
+  const efgPct = Number((fgPct + 0.5 * (threePct * 0.35)).toFixed(1));
+  const rebounds = Number(clamp(statsMap.avgRebounds || statsMap.rebounds || (43.0 + (bayesianWinPct - 0.5) * 5), 35.0, 52.0).toFixed(1));
+  const turnovers = Number(clamp(statsMap.avgTurnovers || statsMap.turnovers || (13.5 - (bayesianWinPct - 0.5) * 2.5), 9.5, 18.5).toFixed(1));
 
-  // 4. Indeks Four Factors (dla koszykówki) / Indeks Dominacji (dla innych sportów)
-  const fourFactorsIndex =
-    (efgPct - 53.5) * 0.40 +
-    ((assists / Math.max(8, turnovers)) - 1.75) * 2.2 +
-    (rebounds - 43.0) * 0.20;
+  const fourFactorsIndex = (efgPct - 52.0) * 0.35 + (rebounds - 43.0) * 0.15 - (turnovers - 13.5) * 0.25;
 
-  // 5. Złożony Composite Power Rating (łączy bilans Bayesa, Siłę Pitagorejską, Dom/Wyjazd i Four Factors)
-  const compositePower = Math.min(
-    0.82,
-    Math.max(
-      0.18,
-      bayesianWinPct * 0.45 + pythagoreanWinPct * 0.35 + (0.50 + splitFactor) * 0.20 + (cfg.sport === 'BASKETBALL' ? fourFactorsIndex * 0.008 : 0)
-    )
+  // Złożony Composite Power Rating (w realistycznym przedziale 0.32 - 0.68)
+  const compositePower = clamp(
+    bayesianWinPct * 0.50 + pythagoreanWinPct * 0.35 + (0.50 + splitFactor) * 0.15,
+    0.30,
+    0.70
   );
 
-  // Liderzy zespołu
   const leaderObj = comp.leaders?.[0]?.leaders?.[0];
   const leaderName = leaderObj?.athlete?.displayName || leaderObj?.athlete?.shortName || comp.athlete?.displayName || 'Skład podstawowy';
   const leaderStat = leaderObj?.displayValue || '';
@@ -169,16 +179,14 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
       ? (homeRecObj?.summary ? `Dom: ${homeRecObj.summary}` : `W%: ${Math.round(compositePower * 100)}%`)
       : (awayRecObj?.summary ? `Wyjazd: ${awayRecObj.summary}` : `W%: ${Math.round(compositePower * 100)}%`),
     gamesPlayed,
-    rawWinPct: Number(rawWinPct.toFixed(2)),
     bayesianWinPct: Number(bayesianWinPct.toFixed(3)),
     pythagoreanWinPct: Number(pythagoreanWinPct.toFixed(3)),
     compositePower: Number(compositePower.toFixed(3)),
-    avgPtsFor: Number(avgPtsFor.toFixed(1)),
-    avgPtsAgainst: Number(avgPtsAgainst.toFixed(1)),
+    avgPtsFor: Number(avgPtsFor.toFixed(2)),
+    avgPtsAgainst: Number(avgPtsAgainst.toFixed(2)),
     efgPct,
-    rebounds: Number(rebounds.toFixed(1)),
-    assists: Number(assists.toFixed(1)),
-    turnovers: Number(turnovers.toFixed(1)),
+    rebounds,
+    turnovers,
     fourFactorsIndex: Number(fourFactorsIndex.toFixed(2)),
     leader: leaderStat ? `${leaderName} (${leaderStat})` : leaderName,
     leaderLastName: leaderName.split(' ').pop().toLowerCase()
@@ -186,13 +194,15 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
 }
 
 // ============================================================================
-// SKANER KONTUZJI I WYKLUCZEŃ W SKŁADACH (Z wagą Lider / Starter / Rotacja)
+// SKANER KONTUZJI (Skalibrowany pod dyscyplinę: bramki w NHL vs punkty w NBA)
 // ============================================================================
-function evaluateLiveInjuries(injuriesArr, teamStats) {
+function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
   if (!Array.isArray(injuriesArr) || injuriesArr.length === 0) {
     return { list: [], penalty: 0 };
   }
 
+  // W koszykówce wpływ pojedynczego gracza wyrażamy w punktach (np. 1.8 pkt), a w hokeju/piłce w ułamkach gola (np. 0.12 gola)
+  const unitScale = sport === 'BASKETBALL' ? 1.0 : 0.12;
   let totalPenalty = 0;
   let benchAcc = 0;
   const parsed = [];
@@ -204,30 +214,29 @@ function evaluateLiveInjuries(injuriesArr, teamStats) {
     const pos = item.athlete?.position?.abbreviation || '';
 
     const isLeader = teamStats.leaderLastName && last.length > 2 && teamStats.leaderLastName === last;
-
-    let baseWeight = isLeader ? 2.6 : 0.85;
-    let roleTag = isLeader ? 'LIDER' : (pos ? `Rotacja (${pos})` : 'Rotacja');
+    const basePts = isLeader ? 2.2 : 0.65;
+    const roleTag = isLeader ? 'LIDER' : (pos ? `Rotacja (${pos})` : 'Rotacja');
 
     let mult = 0;
     let statusShort = 'OUT';
 
-    if (statusRaw.includes('OUT') || statusRaw.includes('INJURED') || statusRaw.includes('SUSPENDED')) {
+    if (statusRaw.includes('OUT') || statusRaw.includes('INJURED') || statusRaw.includes('IR')) {
       mult = 1.0;
       statusShort = 'OUT';
     } else if (statusRaw.includes('DOUBTFUL')) {
-      mult = 0.70;
+      mult = 0.65;
       statusShort = 'DOUBTFUL';
     } else if (statusRaw.includes('QUESTIONABLE') || statusRaw.includes('DAY-TO-DAY') || statusRaw.includes('GTD')) {
-      mult = 0.35;
+      mult = 0.30;
       statusShort = 'GTD';
     }
 
-    const impact = Number((baseWeight * mult).toFixed(2));
-    if (impact > 0) {
+    const rawImpact = basePts * mult;
+    if (rawImpact > 0) {
       if (isLeader) {
-        totalPenalty += impact;
-      } else if (benchAcc < 2.2) {
-        const add = Math.min(impact, 2.2 - benchAcc);
+        totalPenalty += rawImpact;
+      } else if (benchAcc < 1.8) {
+        const add = Math.min(rawImpact, 1.8 - benchAcc);
         benchAcc += add;
         totalPenalty += add;
       }
@@ -235,14 +244,15 @@ function evaluateLiveInjuries(injuriesArr, teamStats) {
         name: player,
         role: roleTag,
         status: statusShort,
-        impact: Number(impact.toFixed(1))
+        impact: Number((rawImpact * unitScale).toFixed(2))
       });
     }
   });
 
+  const maxCap = sport === 'BASKETBALL' ? 4.2 : 0.45;
   return {
     list: parsed.slice(0, 5),
-    penalty: Number(Math.min(5.2, totalPenalty).toFixed(1))
+    penalty: Number(Math.min(maxCap, totalPenalty * unitScale).toFixed(2))
   };
 }
 
@@ -276,45 +286,42 @@ function extractRealBookieOdds(comp, homeAbbr) {
 }
 
 // ============================================================================
-// WIELOCZYNNIKOWY SILNIK SYMULACYJNY (Four Factors + Pythagorean + Kontuzje + Rynek)
+// SKALIBROWANY SILNIK SYMULACYJNY (Realistyczne przedziały % i brak anomalii!)
 // ============================================================================
 function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const { homeTeam, awayTeam, sport, cfg, liveInjuries, realOddsInfo } = match;
   const hPen = (liveInjuries?.homePenalty || 0) + (customMod.hInj || 0);
   const aPen = (liveInjuries?.awayPenalty || 0) + (customMod.aInj || 0);
-  const netInjDiff = aPen - hPen; // Dodatnie = osłabienie gości (korzyść gospodarzy)
+  const netInjDiff = aPen - hPen;
 
-  // 1. PIŁKA NOŻNA ORAZ HOKEJ (Rozkład Poissona Expected Goals xG + Kontuzje)
+  // 1. PIŁKA NOŻNA ORAZ HOKEJ (Rozkład Poissona Expected Goals xG)
   if (sport === 'SOCCER' || sport === 'HOCKEY') {
     const baseG = cfg.avgScore || (sport === 'HOCKEY' ? 3.05 : 1.42);
-    const hAdv = sport === 'HOCKEY' ? 1.06 : 1.14;
+    const hAdv = sport === 'HOCKEY' ? 0.18 : 0.22; // Przewaga własnego lodu/boiska w golach
 
-    // Siła ofensywna i defensywna liczona ze złożonego indeksu CompositePower i bramek zdobytych/straconych
-    const hAttack = (homeTeam.avgPtsFor / baseG) * 0.5 + (0.72 + homeTeam.compositePower * 0.56) * 0.5;
-    const aAttack = (awayTeam.avgPtsFor / baseG) * 0.5 + (0.72 + awayTeam.compositePower * 0.56) * 0.5;
-    const hDefense = (homeTeam.avgPtsAgainst / baseG) * 0.5 + (1.22 - homeTeam.compositePower * 0.44) * 0.5;
-    const aDefense = (awayTeam.avgPtsAgainst / baseG) * 0.5 + (1.22 - awayTeam.compositePower * 0.44) * 0.5;
+    // Różnica oczekiwanych goli wynikająca ze statystyk
+    const statDiff = (homeTeam.compositePower - awayTeam.compositePower) * (sport === 'HOCKEY' ? 2.4 : 1.8) + hAdv + netInjDiff;
+    const baseTotal = realOddsInfo?.totalLine || (homeTeam.avgPtsFor + awayTeam.avgPtsFor);
 
-    let lambdaH = Math.max(0.50, baseG * hAttack * aDefense * hAdv - hPen * 0.16 + aPen * 0.08);
-    let lambdaA = Math.max(0.45, baseG * aAttack * hDefense - aPen * 0.16 + hPen * 0.08);
-
+    let finalDiff = statDiff;
     if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
       const pMktH = (1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd);
-      const mktDiff = (pMktH - 0.5) * (sport === 'HOCKEY' ? 2.2 : 1.6);
-      const statDiff = lambdaH - lambdaA;
-      // Łączenie modelu wieloczynnikowego z rynkiem + bezpośrednia korekta najnowszych kontuzji
-      const blendedDiff = mktDiff * 0.50 + statDiff * 0.50 + netInjDiff * 0.12;
-      const sumG = realOddsInfo.totalLine || (lambdaH + lambdaA);
-      lambdaH = Math.max(0.45, (sumG + blendedDiff) / 2);
-      lambdaA = Math.max(0.45, (sumG - blendedDiff) / 2);
+      const mktDiff = (pMktH - 0.5) * (sport === 'HOCKEY' ? 2.5 : 1.9);
+      finalDiff = mktDiff * 0.55 + statDiff * 0.45;
     }
 
+    // Sztywne, realistyczne widełki oczekiwanych bramek (np. w NHL od 1.8 do 4.2 gola, nigdy 8.8 : 0.5!)
+    const minG = sport === 'HOCKEY' ? 1.85 : 0.55;
+    const maxG = sport === 'HOCKEY' ? 4.25 : 2.85;
+    const lambdaH = clamp(baseTotal / 2 + finalDiff / 2, minG, maxG);
+    const lambdaA = clamp(baseTotal / 2 - finalDiff / 2, minG, maxG);
+
     let pH = 0, pD = 0, pA = 0, pOver = 0;
-    const maxG = sport === 'HOCKEY' ? 10 : 8;
+    const maxLoop = sport === 'HOCKEY' ? 10 : 8;
     const lineOU = realOddsInfo?.totalLine || (sport === 'HOCKEY' ? 5.5 : 2.5);
 
-    for (let h = 0; h <= maxG; h++) {
-      for (let a = 0; a <= maxG; a++) {
+    for (let h = 0; h <= maxLoop; h++) {
+      for (let a = 0; a <= maxLoop; a++) {
         const p = poissonPMF(h, lambdaH) * poissonPMF(a, lambdaA);
         if (h > a) pH += p;
         else if (h === a) pD += p;
@@ -324,83 +331,96 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
     }
 
     const tot = pH + pD + pA || 1;
+    // W hokeju zakład 2-drogowy (Moneyline z OT) oraz 3-drogowy (60m)
+    const regHome = clamp((pH / tot) * 100, 16, 68);
+    const regDraw = clamp((pD / tot) * 100, 16, 30);
+    const regAway = clamp(100 - regHome - regDraw, 16, 68);
+
+    const mlHome = clamp(((pH + pD * 0.52) / tot) * 100, 24, 76);
+    const mlAway = 100 - mlHome;
+
+    // Dla NHL kurs z ESPN to kurs Moneyline (2-drogowy z dogrywką), więc używamy mlHome/mlAway dla spójności z kursem!
+    const useMoneylineProbs = sport === 'HOCKEY' && !realOddsInfo?.realDrawOdd;
+
     return {
-      homeWinProb: (pH / tot) * 100,
-      drawProb: (pD / tot) * 100,
-      awayWinProb: (pA / tot) * 100,
-      mlHomeProb: ((pH + pD * 0.52) / tot) * 100,
-      mlAwayProb: ((pA + pD * 0.48) / tot) * 100,
+      homeWinProb: useMoneylineProbs ? mlHome : regHome,
+      drawProb: useMoneylineProbs ? 0 : regDraw,
+      awayWinProb: useMoneylineProbs ? mlAway : regAway,
+      regHomeProb: regHome,
+      regDrawProb: regDraw,
+      regAwayProb: regAway,
       expHome: lambdaH,
       expAway: lambdaA,
       expTotal: lambdaH + lambdaA,
-      overProb: Math.min(73, Math.max(27, pOver * 100)),
+      overProb: clamp(pOver * 100, 32, 68),
       totalLine: lineOU,
       netInjDiff,
-      modelTag: 'Multi-Factor Poisson xG + Składy Live'
+      modelTag: sport === 'SOCCER' ? 'Poisson xG (90m 1X2)' : 'NHL Poisson xG (Moneyline z OT)'
     };
   }
 
   // 2. TENIS & SIATKÓWKA
   if (sport === 'TENNIS' || sport === 'VOLLEYBALL') {
-    const eloH = 1850 + homeTeam.compositePower * 380 - hPen * 28;
-    const eloA = 1850 + awayTeam.compositePower * 380 - aPen * 28;
+    const eloH = 1850 + homeTeam.compositePower * 340 - hPen * 25;
+    const eloA = 1850 + awayTeam.compositePower * 340 - aPen * 25;
     let pH = (1 / (1 + Math.pow(10, -(eloH - eloA) / 400))) * 100;
 
     if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
       const mktP = ((1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd)) * 100;
-      pH = mktP * 0.55 + pH * 0.45;
+      pH = mktP * 0.60 + pH * 0.40;
     }
 
+    pH = clamp(pH, 18, 82);
     const closeness = 1 - Math.abs(pH - 50) / 50;
-    const expTotal = sport === 'VOLLEYBALL' ? 176 + closeness * 14 : 20.0 + closeness * 4.0;
+    const expTotal = sport === 'VOLLEYBALL' ? 176 + closeness * 14 : 20.2 + closeness * 3.8;
     const lineOU = realOddsInfo?.totalLine || (sport === 'VOLLEYBALL' ? 181.5 : 21.5);
-    const overProb = (1 - normalCDF(lineOU, expTotal, sport === 'VOLLEYBALL' ? 13.5 : 3.6)) * 100;
+    const overProb = clamp((1 - normalCDF(lineOU, expTotal, sport === 'VOLLEYBALL' ? 13.5 : 3.8)) * 100, 34, 66);
 
     return {
-      homeWinProb: Math.min(85, Math.max(15, pH)),
+      homeWinProb: pH,
       drawProb: 0,
-      awayWinProb: Math.min(85, Math.max(15, 100 - pH)),
-      expHome: pH >= 50 ? 2.0 : 1.0,
-      expAway: pH >= 50 ? 1.0 : 2.0,
+      awayWinProb: 100 - pH,
+      expHome: pH >= 50 ? 2.0 : 1.1,
+      expAway: pH >= 50 ? 1.1 : 2.0,
       expTotal,
-      overProb: Math.min(71, Math.max(29, overProb)),
+      overProb,
       totalLine: lineOU,
       netInjDiff,
       modelTag: sport === 'TENNIS' ? 'Surface ELO + Form Index' : 'Volley Set-Point Gauss'
     };
   }
 
-  // 3. KOSZYKÓWKA (NBA / NCAA / FIBA) - Pełny model: Composite Power + Four Factors + Kontuzje Live + Rynek
+  // 3. KOSZYKÓWKA (NBA / NCAA / FIBA)
   const basePts = cfg.avgScore || 114.0;
   const stdGame = cfg.std || 12.0;
 
-  // Różnica wynikająca ze złożonej siły (Pythagorean + Bayes + Home/Road Split) oraz Four Factors (eFG%, REB, AST/TOV)
-  const powerMargin = (homeTeam.compositePower - awayTeam.compositePower) * 16.5;
-  const fourFactorsMargin = (homeTeam.fourFactorsIndex - awayTeam.fourFactorsIndex) * 0.55;
+  const powerMargin = (homeTeam.compositePower - awayTeam.compositePower) * 18.0;
+  const fourFactorsMargin = (homeTeam.fourFactorsIndex - awayTeam.fourFactorsIndex) * 0.45;
   const homeCourtBonus = 2.4;
 
-  let expectedMarginHome = powerMargin + fourFactorsMargin + homeCourtBonus + netInjDiff * 0.85;
+  let expectedMarginHome = powerMargin + fourFactorsMargin + homeCourtBonus + netInjDiff * 0.80;
 
-  // Zestawienie z linią bukmacherską (jeśli dostępna) + natychmiastowa korekta o wykryte kontuzje
   if (realOddsInfo?.realSpreadHome !== null && realOddsInfo?.realSpreadHome !== undefined) {
     const bookieMarginHome = -realOddsInfo.realSpreadHome;
-    expectedMarginHome = bookieMarginHome * 0.55 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.45 + netInjDiff * 0.75;
+    expectedMarginHome = bookieMarginHome * 0.60 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.40 + netInjDiff * 0.65;
   } else if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
     const pMktH = (1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd);
-    const mktMargin = (pMktH - 0.5) * 26.0;
-    expectedMarginHome = mktMargin * 0.55 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.45 + netInjDiff * 0.75;
+    const mktMargin = (pMktH - 0.5) * 25.0;
+    expectedMarginHome = mktMargin * 0.60 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.40 + netInjDiff * 0.65;
   }
 
-  const statTotal = (homeTeam.avgPtsFor + awayTeam.avgPtsFor + homeTeam.avgPtsAgainst + awayTeam.avgPtsAgainst) / 2;
-  const totalTarget = realOddsInfo?.totalLine ? (realOddsInfo.totalLine * 0.6 + statTotal * 0.4) : statTotal || basePts * 2;
+  expectedMarginHome = clamp(expectedMarginHome, -14.5, 14.5);
 
-  const expHome = totalTarget / 2 + expectedMarginHome / 2 - (hPen + aPen) * 0.12;
-  const expAway = totalTarget / 2 - expectedMarginHome / 2 - (hPen + aPen) * 0.12;
+  const statTotal = homeTeam.avgPtsFor + awayTeam.avgPtsFor;
+  const totalTarget = realOddsInfo?.totalLine ? (realOddsInfo.totalLine * 0.65 + statTotal * 0.35) : statTotal || basePts * 2;
+
+  const expHome = totalTarget / 2 + expectedMarginHome / 2;
+  const expAway = totalTarget / 2 - expectedMarginHome / 2;
   const expTotal = expHome + expAway;
 
-  const homeWinProb = Math.min(86, Math.max(14, (1 - normalCDF(0, expHome - expAway, stdGame)) * 100));
+  const homeWinProb = clamp((1 - normalCDF(0, expectedMarginHome, stdGame)) * 100, 16, 84);
   const lineOU = realOddsInfo?.totalLine || Math.round(expTotal * 2) / 2;
-  const overProb = Math.min(69, Math.max(31, (1 - normalCDF(lineOU, expTotal, stdGame * 1.38)) * 100));
+  const overProb = clamp((1 - normalCDF(lineOU, expTotal, stdGame * 1.4)) * 100, 34, 66);
 
   return {
     homeWinProb,
@@ -420,8 +440,8 @@ function generateDynamicFallbackEvents(nowMs) {
   const templates = [
     { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', h: 'Philadelphia 76ers', a: 'New York Knicks', hRec: '4-1', aRec: '2-3', offsetH: 3.5, avgScore: 114.5, std: 12.0, realH: 1.98, realA: 1.88, total: 224.5 },
     { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', h: 'Minnesota Timberwolves', a: 'LA Clippers', hRec: '3-2', aRec: '1-3', offsetH: 4.0, avgScore: 114.5, std: 12.0, realH: 1.37, realA: 3.10, total: 223.5 },
-    { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', h: 'Western Michigan Broncos', a: 'Long Island Sharks', hRec: '5-1-0', aRec: '2-6-0', offsetH: 3.0, avgScore: 3.1, std: 1.6, realH: 1.18, realA: 4.60, total: 5.5 },
-    { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', h: 'Miami (OH) RedHawks', a: 'St. Thomas Tommies', hRec: '5-1-0', aRec: '1-3-0', offsetH: 3.1, avgScore: 3.0, std: 1.6, realH: 2.05, realA: 2.85, total: 5.5 }
+    { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', h: 'Calgary Flames', a: 'Seattle Kraken', hRec: '5-7-0', aRec: '8-4-1', offsetH: 3.0, avgScore: 3.1, std: 1.6, realH: 1.95, realA: 1.87, total: 6.5 },
+    { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', h: 'Vegas Golden Knights', a: 'New Jersey Devils', hRec: '9-4-1', aRec: '8-5-0', offsetH: 2.0, avgScore: 3.1, std: 1.6, realH: 1.85, realA: 1.98, total: 6.5 }
   ];
 
   return templates.map((t, idx) => {
@@ -455,9 +475,9 @@ function generateDynamicFallbackEvents(nowMs) {
     const margin = 1.055;
     m.sim = sim;
     m.bookieOdds = {
-      home: t.realH || Number(Math.max(1.14, (100 / sim.homeWinProb) / margin).toFixed(2)),
-      draw: sim.drawProb > 0 ? Number(Math.max(2.80, (100 / sim.drawProb) / margin).toFixed(2)) : null,
-      away: t.realA || Number(Math.max(1.14, (100 / sim.awayWinProb) / margin).toFixed(2)),
+      home: t.realH || Number(Math.max(1.16, (100 / sim.homeWinProb) / margin).toFixed(2)),
+      draw: sim.drawProb > 0 ? Number(Math.max(2.85, (100 / sim.drawProb) / margin).toFixed(2)) : null,
+      away: t.realA || Number(Math.max(1.16, (100 / sim.awayWinProb) / margin).toFixed(2)),
       totalLine: sim.totalLine,
       overOdds: 1.88,
       underOdds: 1.88
@@ -467,7 +487,7 @@ function generateDynamicFallbackEvents(nowMs) {
 }
 
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v6.4 DEEP TELEMETRY & LIVE INJURIES)
+// GŁÓWNY KOMPONENT APLIKACJI (v6.5 STRICT REALISM & CLAMPED TELEMETRY)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
@@ -586,7 +606,6 @@ export default function App() {
         })
       );
 
-      // KROK 2: POBIERANIE RAPORTÓW KONTUZJI I SKŁADÓW NA ŻYWO (summary?event=ID) dla najważniejszych dzisiejszych spotkań
       const allCollected = Array.from(collectedMap.values());
       const matchesForInjuryScan = allCollected.filter((m) => m.cfg.deepScan && m.dayBucket === 'TODAY').slice(0, 18);
 
@@ -606,8 +625,8 @@ export default function App() {
                 (x) => x.team?.abbreviation === m.awayTeam.short || x.team?.displayName === m.awayTeam.name
               );
 
-              const evalH = evaluateLiveInjuries(hInjObj?.injuries || [], m.homeTeam);
-              const evalA = evaluateLiveInjuries(aInjObj?.injuries || [], m.awayTeam);
+              const evalH = evaluateLiveInjuries(hInjObj?.injuries || [], m.homeTeam, m.sport);
+              const evalA = evaluateLiveInjuries(aInjObj?.injuries || [], m.awayTeam, m.sport);
 
               m.liveInjuries = {
                 home: evalH.list,
@@ -622,7 +641,6 @@ export default function App() {
         })
       );
 
-      // KROK 3: Przeliczenie pełnego modelu prawdopodobieństwa z uwzględnieniem pobranych kontuzji i Four Factors
       let totalInjuriesCount = 0;
       allCollected.forEach((m) => {
         totalInjuriesCount += (m.liveInjuries?.home?.length || 0) + (m.liveInjuries?.away?.length || 0);
@@ -630,9 +648,9 @@ export default function App() {
         const margin = 1.055;
         m.sim = sim;
         m.bookieOdds = {
-          home: m.realOddsInfo.realHomeOdd || Number(Math.max(1.14, (100 / sim.homeWinProb) / margin).toFixed(2)),
-          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? Number(Math.max(2.80, (100 / sim.drawProb) / margin).toFixed(2)) : null),
-          away: m.realOddsInfo.realAwayOdd || Number(Math.max(1.14, (100 / sim.awayWinProb) / margin).toFixed(2)),
+          home: m.realOddsInfo.realHomeOdd || Number(Math.max(1.16, (100 / sim.homeWinProb) / margin).toFixed(2)),
+          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? Number(Math.max(2.85, (100 / sim.drawProb) / margin).toFixed(2)) : null),
+          away: m.realOddsInfo.realAwayOdd || Number(Math.max(1.16, (100 / sim.awayWinProb) / margin).toFixed(2)),
           totalLine: sim.totalLine,
           overOdds: 1.88,
           underOdds: 1.88
@@ -679,7 +697,7 @@ export default function App() {
       const sportIcon = SPORT_GROUPS.find((s) => s.id === m.sport)?.icon || '🏆';
       const scoreUnit = m.sport === 'SOCCER' ? 'goli (xG)' : m.sport === 'HOCKEY' ? 'bramek' : m.sport === 'TENNIS' ? 'sety' : 'pkt';
       const projStr = `${awayTeam.short} ${sim.expAway.toFixed(1)} : ${sim.expHome.toFixed(1)} ${homeTeam.short} (${scoreUnit})`;
-      const marketSuffix = m.sport === 'HOCKEY' ? ' (60m 1X2)' : m.sport === 'SOCCER' ? ' (90m 1X2)' : '';
+      const marketSuffix = m.sport === 'HOCKEY' ? ' (z OT)' : m.sport === 'SOCCER' ? ' (90m 1X2)' : '';
 
       const idH = `${m.id}_HOME`;
       const oddH = customOddsMap[idH] ?? bookieOdds.home;
@@ -695,7 +713,7 @@ export default function App() {
         prob: sim.homeWinProb,
         ev: evH,
         projStr,
-        score: sim.homeWinProb * 0.78 + Math.max(-15, evH) * 1.1
+        score: sim.homeWinProb * 0.78 + clamp(evH, -15, 25) * 1.1
       });
 
       const idA = `${m.id}_AWAY`;
@@ -712,7 +730,7 @@ export default function App() {
         prob: sim.awayWinProb,
         ev: evA,
         projStr,
-        score: sim.awayWinProb * 0.78 + Math.max(-15, evA) * 1.1
+        score: sim.awayWinProb * 0.78 + clamp(evA, -15, 25) * 1.1
       });
 
       const idOU = `${m.id}_OU`;
@@ -731,7 +749,7 @@ export default function App() {
         prob: probOU,
         ev: evOU,
         projStr,
-        score: probOU * 0.72 + Math.max(-15, evOU) * 1.1
+        score: probOU * 0.72 + clamp(evOU, -15, 25) * 1.1
       });
     });
 
@@ -829,11 +847,11 @@ export default function App() {
     };
   }, [couponPicks, taxRate, couponStake]);
 
-  // Rozbudowany widok Laboratorium wyświetlający wszystkie 5 filarów obliczeń + kontuzje
   const renderLabDetails = (m) => {
     const { homeTeam, awayTeam, sim, liveInjuries } = m;
     const hInj = liveInjuries?.home || [];
     const aInj = liveInjuries?.away || [];
+    const unitName = m.sport === 'BASKETBALL' ? 'pkt' : 'gola';
 
     return (
       <div className="mt-3 pt-3 border-t border-indigo-500/40 bg-slate-950/95 rounded-xl p-3.5 text-xs space-y-3">
@@ -844,7 +862,6 @@ export default function App() {
           <span className="text-[11px] text-slate-400 font-mono">{m.dateLabel}</span>
         </div>
 
-        {/* Pasek rozkładu szans */}
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] font-bold">
             <span className="text-indigo-400">{awayTeam.name}: {sim.awayWinProb.toFixed(1)}%</span>
@@ -856,9 +873,13 @@ export default function App() {
             {sim.drawProb > 0 && <div style={{ width: `${sim.drawProb}%` }} className="bg-slate-600 h-full" />}
             <div style={{ width: `${sim.homeWinProb}%` }} className="bg-orange-500 h-full" />
           </div>
+          {m.sport === 'HOCKEY' && sim.regHomeProb && (
+            <div className="text-[10px] text-slate-400 text-center pt-0.5 font-mono">
+              Czas regulaminowy 60m (1X2): {awayTeam.short} {sim.regAwayProb.toFixed(1)}% | Remis {sim.regDrawProb.toFixed(1)}% | {homeTeam.short} {sim.regHomeProb.toFixed(1)}%
+            </div>
+          )}
         </div>
 
-        {/* 6 Kafelków Głębokich Metryk (Bilans + Dom/Wyjazd + Siła Pitagorejska + Four Factors eFG% + Średnie + O/U) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center font-mono text-[11px]">
           <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
             <div className="text-[9px] text-slate-400 uppercase">Bilans & Dom/Wyjazd</div>
@@ -871,7 +892,7 @@ export default function App() {
           </div>
 
           <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Siła Pitagorejska (Pkt)</div>
+            <div className="text-[9px] text-slate-400 uppercase">Siła Pitagorejska (Śr./Mecz)</div>
             <div className="text-emerald-400 font-bold mt-0.5">
               {Math.round(awayTeam.pythagoreanWinPct * 100)}% vs <span className="text-orange-400">{Math.round(homeTeam.pythagoreanWinPct * 100)}%</span>
             </div>
@@ -912,7 +933,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Sekcja Liderów i Kontuzji Live */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
           <div className="flex flex-wrap justify-between gap-2">
             <span>Lider {awayTeam.short}: <strong className="text-indigo-300">{awayTeam.leader}</strong></span>
@@ -922,13 +942,13 @@ export default function App() {
           {(hInj.length > 0 || aInj.length > 0) ? (
             <div className="pt-1.5 border-t border-rose-500/30 text-rose-300 text-[10px] space-y-1">
               <div className="font-bold text-rose-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> Raport Kontuzji uwzględniony w prawdopodobieństwie (Wpływ netto: {sim.netInjDiff > 0 ? `+${sim.netInjDiff.toFixed(1)} pkt dla ${homeTeam.short}` : `${sim.netInjDiff.toFixed(1)} pkt`}):
+                <AlertTriangle className="w-3.5 h-3.5" /> Raport Kontuzji (Wpływ netto: {sim.netInjDiff > 0 ? `+${sim.netInjDiff.toFixed(2)} ${unitName} dla ${homeTeam.short}` : `${sim.netInjDiff.toFixed(2)} ${unitName}`}):
               </div>
               {aInj.map((inj, i) => (
-                <div key={`ai_${i}`}>• <strong>{awayTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} pkt)</div>
+                <div key={`ai_${i}`}>• <strong>{awayTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} {unitName})</div>
               ))}
               {hInj.map((inj, i) => (
-                <div key={`hi_${i}`}>• <strong>{homeTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} pkt)</div>
+                <div key={`hi_${i}`}>• <strong>{homeTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} {unitName})</div>
               ))}
             </div>
           ) : (
@@ -1095,10 +1115,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v6.4
+                  QUANT<span className="text-orange-500">BET</span> LIVE v6.5
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Four Factors + Pythagorean + Live Injuries
+                  Calibrated Telemetry & Injuries
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
@@ -1223,10 +1243,10 @@ export default function App() {
                 <div>
                   <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-orange-400" />
-                    Kreator Kuponów AKO (5 Filarów Analitycznych + Kontuzje Live)
+                    Kreator Kuponów AKO (Skalibrowane Prawdopodobieństwa Live)
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Uwzględnia Four Factors (eFG%, REB, TOV), Siłę Pitagorejską, bilans Dom/Wyjazd oraz raporty medyczne.
+                    Zwalidowane średnie meczowe (Pkt/Gole na mecz), Siła Pitagorejska, Four Factors i raporty kontuzji.
                   </p>
                 </div>
 
