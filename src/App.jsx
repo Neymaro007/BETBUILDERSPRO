@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, Clock, Search, X, Stethoscope, AlertTriangle
 } from 'lucide-react';
 
-// ============================================================================
+// ===========================================================================
 // KATEGORIE SPORTOWE I ENDPOINTY LIVE API
 // ============================================================================
 const SPORT_GROUPS = [
