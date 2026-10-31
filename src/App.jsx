@@ -26,7 +26,7 @@ const MARKET_SCOPES = [
 ];
 
 const LINE_RISK_PROFILES = [
-  { id: 'SAFE_LADDER', label: 'Bezpieczne linie (64%–84% | Kurs ~1.15–1.48)', minProb: 64, maxProb: 85 },
+  { id: 'SAFE_LADDER', label: 'Bezpieczne linie (62%–78% | Kurs ~1.22–1.52)', minProb: 62, maxProb: 78 },
   { id: 'MAIN_LADDER', label: 'Linie środkowe (50%–64% | Kurs ~1.50–1.95)', minProb: 50, maxProb: 64 },
   { id: 'HIGH_ODDS_LADDER', label: 'Wysokie kursy (22%–50% | Kurs ~2.00–4.50)', minProb: 22, maxProb: 50 },
   { id: 'FULL_LADDER', label: 'Cała drabinka (Wszystkie linie od–do)', minProb: 18, maxProb: 86 }
@@ -98,7 +98,6 @@ function probToFairBookieOdd(probPct, margin = 1.06) {
   return Number(Math.max(1.07, (1 / p) / margin).toFixed(2));
 }
 
-// Kolorowanie procentów w zależności od wysokości prawdopodobieństwa
 function getProbColorClass(prob) {
   if (prob >= 72) return 'text-emerald-400 font-black';
   if (prob >= 60) return 'text-teal-300 font-bold';
@@ -592,7 +591,7 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
 }
 
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v7.0 SMART SPLIT & COMBO OPTIMIZER)
+// GŁÓWNY KOMPONENT APLIKACJI (v7.1 FIXED DUO & SUREBETS ACROSS ALL MARKETS)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
@@ -614,7 +613,7 @@ export default function App() {
   const [builderStrategy, setBuilderStrategy] = useState('safe');
   const [builderScope, setBuilderScope] = useState('ML');
   const [lineRiskProfile, setLineRiskProfile] = useState('SAFE_LADDER');
-  const [activeSpecialMode, setActiveSpecialMode] = useState('STANDARD'); // 'STANDARD' | 'TOP_SUREBETS' | 'BEST_DUO'
+  const [activeSpecialMode, setActiveSpecialMode] = useState('DUO_2'); // Domyślnie Złoty Dublet 2.00+
   const [taxRate, setTaxRate] = useState(true);
   const [couponStake, setCouponStake] = useState(2);
   const [customOddsMap, setCustomOddsMap] = useState({});
@@ -868,12 +867,24 @@ export default function App() {
         const bttsYes = sim.bttsYesProb >= 50;
         const bttsProb = bttsYes ? sim.bttsYesProb : 100 - sim.bttsYesProb;
         addPick(`${m.id}_BTTS`, m, sportIcon, 'SPECIALS', 'Obie strzelą', `Obie drużyny strzelą gola: ${bttsYes ? 'TAK' : 'NIE'}`, probToFairBookieOdd(bttsProb, 1.065), bttsProb, projStr);
+
+        if (m.sport === 'HOCKEY') {
+          const favRegHome = sim.regHomeProb >= sim.regAwayProb;
+          const regP = favRegHome ? sim.regHomeProb : sim.regAwayProb;
+          const regT = favRegHome ? homeTeam.name : awayTeam.name;
+          addPick(`${m.id}_REG60`, m, sportIcon, 'SPECIALS', 'Mecz 60m (1X2)', `Mecz (60 min): ${regT} wygra`, probToFairBookieOdd(regP, 1.06), regP, projStr);
+        }
       }
 
       if (m.sport === 'TENNIS' && sim.setsUnder25Prob) {
         const is2Sets = sim.setsUnder25Prob >= 50;
         const setsP = is2Sets ? sim.setsUnder25Prob : sim.setsOver25Prob;
         addPick(`${m.id}_SETS_OU`, m, sportIcon, 'SPECIALS', 'Liczba setów', `Liczba setów: ${is2Sets ? '-2.5 (2 sety)' : '+2.5 (3 sety)'}`, probToFairBookieOdd(setsP, 1.06), setsP, projStr);
+
+        const favHome = sim.homeWinProb >= 50;
+        const win1SetProb = clamp((favHome ? sim.homeWinProb : sim.awayWinProb) + 16.5, 62, 85);
+        const favName = favHome ? homeTeam.name : awayTeam.name;
+        addPick(`${m.id}_SET_HCP_PLUS`, m, sportIcon, 'HANDICAP', 'Sety - handicap', `Sety - handicap: ${favName} (+1.5 seta)`, probToFairBookieOdd(win1SetProb, 1.06), win1SetProb, projStr);
       }
 
       if (m.sport === 'BASKETBALL' && sim.winBy1to7Prob) {
@@ -933,7 +944,7 @@ export default function App() {
         p.hasHardData &&
         sports.includes(p.sport) &&
         (dFilter === 'ALL_UPCOMING' || p.match.dayBucket === dFilter) &&
-        p.odds >= 1.13 &&
+        p.odds >= 1.18 &&
         p.prob >= (scope === 'SPECIALS' ? 22 : riskObj.minProb) &&
         p.prob <= (scope === 'ML' ? 88 : riskObj.maxProb)
     );
@@ -961,19 +972,34 @@ export default function App() {
   };
 
   // ==========================================================================
-  // 2. NOWOŚĆ: TOP PEWNIAKI BEZ WZGLĘDU NA KURS (Np. 2, 3 lub 4 najpewniejsze mecze dnia)
+  // 2. TOP PEWNIAKI BEZ WZGLĘDU NA KURS (Np. 2, 3 lub 4 najpewniejsze mecze)
   // ==========================================================================
-  const buildPureSurebetsCoupon = (count = 3, scope = builderScope, sports = includedSports, dFilter = dateFilter) => {
+  const buildPureSurebetsCoupon = (
+    count = 3,
+    scope = builderScope,
+    sports = includedSports,
+    dFilter = dateFilter,
+    riskProf = lineRiskProfile
+  ) => {
     setActiveSpecialMode(`TOP_${count}`);
-    let pool = allPicks.filter(
-      (p) =>
-        p.hasHardData &&
-        sports.includes(p.sport) &&
-        (dFilter === 'ALL_UPCOMING' || p.match.dayBucket === dFilter) &&
-        (scope === 'ALL' ? true : p.marketType === scope)
-    );
+    setBuilderScope(scope);
+    setMarketFilter(scope);
+    setLineRiskProfile(riskProf);
 
-    // Sortujemy ściśle od najwyższego prawdopodobieństwa bez patrzenia na kurs
+    const riskObj = LINE_RISK_PROFILES.find((r) => r.id === riskProf) || LINE_RISK_PROFILES[0];
+
+    let pool = allPicks.filter((p) => {
+      if (!p.hasHardData) return false;
+      if (!sports.includes(p.sport)) return false;
+      if (dFilter !== 'ALL_UPCOMING' && p.match.dayBucket !== dFilter) return false;
+      if (scope !== 'ALL' && p.marketType !== scope) return false;
+      // Dla drabinek respektujemy wybrany profil ryzyka, żeby nie brało samych skrajnych linii 1.08
+      if (p.marketType === 'TOTAL' || p.marketType === 'HANDICAP') {
+        return p.prob >= riskObj.minProb && p.prob <= riskObj.maxProb;
+      }
+      return true;
+    });
+
     pool.sort((a, b) => b.prob - a.prob);
 
     const chosen = [];
@@ -988,53 +1014,77 @@ export default function App() {
   };
 
   // ==========================================================================
-  // 3. NOWOŚĆ: ZŁOTY DUBLET (Dokładnie 2 mecze o kursie łącznym >= minTarget i NAJWYŻSZYM ŁĄCZNYM PRAWDOPODOBIEŃSTWIE!)
+  // 3. NAPRAWIONY ZŁOTY DUBLET (Dokładnie 2 mecze o kursie łącznym >= minTarget
+  // Działa bezbłędnie dla Zwycięzców, Drabinek Punktów/Goli, Handicapów i Mixu!)
   // ==========================================================================
-  const buildOptimalTwoMatchCombo = (minTarget = 2.0, scope = builderScope, sports = includedSports, dFilter = dateFilter) => {
+  const buildOptimalTwoMatchCombo = (
+    minTarget = 2.0,
+    scope = builderScope,
+    sports = includedSports,
+    dFilter = dateFilter,
+    riskProf = lineRiskProfile
+  ) => {
     setActiveSpecialMode(`DUO_${minTarget}`);
     setTargetMinOdds(minTarget);
+    setBuilderScope(scope);
+    setMarketFilter(scope);
+    setLineRiskProfile(riskProf);
 
-    // Wybieramy najlepszy typ z każdego pojedynczego meczu w ramach wybranego zakresu
-    const bestPerMatchMap = new Map();
+    // KROK A: Grupujemy wszystkie dostępne opcje według pojedynczego meczu (match.id),
+    // dzięki czemu żaden pojedynczy mecz z 31 liniami nie zapcha listy kandydatów!
+    const byMatch = new Map();
+
     allPicks.forEach((p) => {
       if (!p.hasHardData) return;
       if (!sports.includes(p.sport)) return;
       if (dFilter !== 'ALL_UPCOMING' && p.match.dayBucket !== dFilter) return;
       if (scope !== 'ALL' && p.marketType !== scope) return;
+      // Do dubletu na kurs 2.00+ lub 3.00+ pojedynczy typ musi mieć kurs w sensownym oknie (1.22 - 2.85)
+      if (p.odds < 1.22 || p.odds > 2.85) return;
 
-      const listForMatch = bestPerMatchMap.get(p.match.id) || [];
-      listForMatch.push(p);
-      bestPerMatchMap.set(p.match.id, listForMatch);
+      if (!byMatch.has(p.match.id)) {
+        byMatch.set(p.match.id, []);
+      }
+      byMatch.get(p.match.id).push(p);
     });
 
-    // Zbieramy kandydatów (do 80 najmocniejszych typów)
-    const candidates = allPicks
-      .filter(
-        (p) =>
-          p.hasHardData &&
-          sports.includes(p.sport) &&
-          (dFilter === 'ALL_UPCOMING' || p.match.dayBucket === dFilter) &&
-          (scope === 'ALL' ? true : p.marketType === scope)
-      )
-      .sort((a, b) => b.prob - a.prob)
-      .slice(0, 80);
+    // Z każdego meczu bierzemy maksymalnie 6 najmocniejszych wariantów kursowych (od ~1.25 do ~2.20),
+    // aby algorytm mógł idealnie dobrać parę z dwóch różnych spotkań!
+    const matchEntries = Array.from(byMatch.entries()).map(([mId, picksArr]) => {
+      picksArr.sort((a, b) => b.prob - a.prob);
+      // Wybieramy reprezentantów różnych progów kursowych z tego meczu
+      const sampled = [];
+      let lastOdd = 0;
+      for (const item of picksArr) {
+        if (sampled.length === 0 || Math.abs(item.odds - lastOdd) >= 0.08) {
+          sampled.push(item);
+          lastOdd = item.odds;
+        }
+        if (sampled.length >= 6) break;
+      }
+      return { mId, options: sampled };
+    });
 
     let bestPair = null;
     let maxCombinedProb = -1;
 
-    // Przeszukujemy wszystkie pary nieskorelowanych spotkań (i, j), które dają kurs łączny >= minTarget
-    for (let i = 0; i < candidates.length; i++) {
-      for (let j = i + 1; j < candidates.length; j++) {
-        const p1 = candidates[i];
-        const p2 = candidates[j];
-        if (p1.match.id === p2.match.id) continue;
+    // KROK B: Przeszukujemy wszystkie pary dwóch różnych meczów (Mecz A vs Mecz B)
+    for (let i = 0; i < matchEntries.length; i++) {
+      for (let j = i + 1; j < matchEntries.length; j++) {
+        const optsA = matchEntries[i].options;
+        const optsB = matchEntries[j].options;
 
-        const combinedOdds = p1.odds * p2.odds;
-        if (combinedOdds >= minTarget) {
-          const combinedProb = (p1.prob / 100) * (p2.prob / 100);
-          if (combinedProb > maxCombinedProb) {
-            maxCombinedProb = combinedProb;
-            bestPair = [p1.id, p2.id];
+        for (const p1 of optsA) {
+          for (const p2 of optsB) {
+            const combinedOdds = p1.odds * p2.odds;
+            // Szukamy pary o kursie >= minTarget (i nieprzekraczającym minTarget + 1.6, żeby nie brać szalonych kursów)
+            if (combinedOdds >= minTarget && combinedOdds <= minTarget + 1.65) {
+              const combinedProb = (p1.prob / 100) * (p2.prob / 100);
+              if (combinedProb > maxCombinedProb) {
+                maxCombinedProb = combinedProb;
+                bestPair = [p1.id, p2.id];
+              }
+            }
           }
         }
       }
@@ -1043,14 +1093,48 @@ export default function App() {
     if (bestPair) {
       setCouponPickIds(bestPair);
     } else {
-      // Jeśli żadne 2 pojedyncze typy nie przebiły progu, uruchamiamy standardowy dobór
-      buildAutoCoupon(minTarget, 'safe', scope, sports, dFilter, lineRiskProfile);
+      // Jeśli zakres jest bardzo wąski, poszerzamy okno bez górnego limitu kursu
+      for (let i = 0; i < matchEntries.length; i++) {
+        for (let j = i + 1; j < matchEntries.length; j++) {
+          for (const p1 of matchEntries[i].options) {
+            for (const p2 of matchEntries[j].options) {
+              if (p1.odds * p2.odds >= minTarget) {
+                const combinedProb = (p1.prob / 100) * (p2.prob / 100);
+                if (combinedProb > maxCombinedProb) {
+                  maxCombinedProb = combinedProb;
+                  bestPair = [p1.id, p2.id];
+                }
+              }
+            }
+          }
+        }
+      }
+      if (bestPair) setCouponPickIds(bestPair);
+    }
+  };
+
+  // Uniwersalny dispatcher wywoływany przy zmianie Rynku, Sportu, Daty lub Profilu Ryzyka:
+  // utrzymuje wybrany przez Ciebie tryb (np. Złoty Dublet 2.00+ albo Top 2 Mecze)!
+  const triggerCurrentModeRebuild = (
+    nextScope = builderScope,
+    nextSports = includedSports,
+    nextDate = dateFilter,
+    nextRisk = lineRiskProfile
+  ) => {
+    if (activeSpecialMode.startsWith('DUO_')) {
+      const targetVal = parseFloat(activeSpecialMode.replace('DUO_', '')) || 2.0;
+      buildOptimalTwoMatchCombo(targetVal, nextScope, nextSports, nextDate, nextRisk);
+    } else if (activeSpecialMode.startsWith('TOP_')) {
+      const cntVal = parseInt(activeSpecialMode.replace('TOP_', ''), 10) || 2;
+      buildPureSurebetsCoupon(cntVal, nextScope, nextSports, nextDate, nextRisk);
+    } else {
+      buildAutoCoupon(targetMinOdds, builderStrategy, nextScope, nextSports, nextDate, nextRisk);
     }
   };
 
   useEffect(() => {
     if (allPicks.length > 0 && couponPickIds.length === 0) {
-      buildOptimalTwoMatchCombo(2.0, 'ML', includedSports, dateFilter);
+      buildOptimalTwoMatchCombo(2.0, 'ML', includedSports, dateFilter, lineRiskProfile);
     }
   }, [allPicks]);
 
@@ -1091,11 +1175,6 @@ export default function App() {
     };
   }, [couponPicks, taxRate, couponStake]);
 
-  // ==========================================================================
-  // PODGLĄD TELEMETRII:
-  // includeLadders = false -> NA KUPONIE (Tylko 6 kolorowych kafelków statystyk + kontuzje, BEZ drabinek!)
-  // includeLadders = true  -> NA LIŚCIE SPOTKAŃ I W LABORATORIUM (Statystyki + pełne drabinki 31 linii STS!)
-  // ==========================================================================
   const renderLabDetails = (m, includeLadders = true) => {
     const { homeTeam, awayTeam, sim, liveInjuries } = m;
     const hInj = liveInjuries?.home || [];
@@ -1117,7 +1196,6 @@ export default function App() {
           <span className="text-[11px] text-slate-400 font-mono">{m.dateLabel}</span>
         </div>
 
-        {/* Kolorowy pasek rozkładu szans */}
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] font-bold">
             <span className="text-indigo-400">1: {homeTeam.name} ({sim.homeWinProb.toFixed(1)}%)</span>
@@ -1136,7 +1214,6 @@ export default function App() {
           )}
         </div>
 
-        {/* PRZYWRÓCONE 6 KOLOROWYCH KAFELKÓW TELEMETRYCZNYCH (WIDOCZNE ZARÓWNO NA KUPONIE, JAK I NA LIŚCIE!) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center font-mono text-[11px]">
           <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
             <div className="text-[9px] text-slate-400 uppercase">Bilans / Ranking</div>
@@ -1212,7 +1289,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Sekcja Liderów i Kontuzji Live (Zawsze widoczna i na kuponie, i na liście!) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
           <div className="flex flex-wrap justify-between gap-2">
             <span>Lider 1 ({homeTeam.short}): <strong className="text-indigo-300">{homeTeam.leader}</strong></span>
@@ -1238,7 +1314,6 @@ export default function App() {
           )}
         </div>
 
-        {/* DWUKOLUMNOWE DRABINKI STS WYŚWIETLAMY TYLKO NA GŁÓWNEJ LIŚCIE SPOTKAŃ I W LABORATORIUM (NIE ZAŚMIECAJĄ KUPONU!) */}
         {includeLadders && sim.totalsLadder && sim.totalsLadder.length > 0 && (
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
             <div className="text-[11px] font-black text-white mb-2 flex items-center justify-between">
@@ -1374,7 +1449,7 @@ export default function App() {
 
       {couponPicks.length === 0 ? (
         <div className="text-center py-6 px-4 border border-dashed border-slate-800 rounded-xl text-xs text-slate-400">
-          Brak zdarzeń na kuponie. Wybierz powyżej np. <strong>Złoty Dublet 2.00+</strong> lub <strong>Top Pewniaki</strong>.
+          Brak zdarzeń na kuponie. Wybierz powyżej np. <strong>2 Mecze • Kurs 2.00+</strong> lub <strong>Top 2/3 Mecze</strong>.
         </div>
       ) : (
         <>
@@ -1443,7 +1518,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* NA KUPONIE POKAZUJEMY WYŁĄCZNIE CZYSTE STATYSTYKI (includeLadders = false)! */}
                   {isCouponItemExpanded && renderLabDetails(item.match, false)}
                 </div>
               );
@@ -1512,10 +1586,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v7.0
+                  QUANT<span className="text-orange-500">BET</span> LIVE v7.1
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Smart Split & Combo Optimizer
+                  Smart Duo & Multi-Market Sync
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
@@ -1574,7 +1648,7 @@ export default function App() {
                   key={d.id}
                   onClick={() => {
                     setDateFilter(d.id);
-                    buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, includedSports, d.id, lineRiskProfile);
+                    triggerCurrentModeRebuild(builderScope, includedSports, d.id, lineRiskProfile);
                   }}
                   className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap flex items-center gap-1 ${
                     dateFilter === d.id ? 'bg-orange-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
@@ -1642,11 +1716,10 @@ export default function App() {
                   Kreator Kuponów AKO & Optymalizator Par (Złoty Dublet / Top Pewniaki)
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Wybierz gotowy tryb specjalny (np. 2 mecze o kursie 2.00+ z najwyższym łącznym %) lub klasyczny cel kursowy.
+                  Złoty Dublet i Top Pewniaki działają teraz z każdym wybranym rynkiem (Zwycięzcy, Drabinka Punktów, Handicapy i Mix)!
                 </p>
               </div>
 
-              {/* NOWY BLOK SPECJALNYCH TRYBÓW KUPONU (ZGODNIE Z TWOJĄ PROŚBĄ!) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30">
                 <div className="space-y-1.5">
                   <span className="text-[10px] font-bold uppercase text-emerald-400 flex items-center gap-1">
@@ -1660,7 +1733,7 @@ export default function App() {
                     ].map((b) => (
                       <button
                         key={b.cnt}
-                        onClick={() => buildPureSurebetsCoupon(b.cnt, builderScope, includedSports, dateFilter)}
+                        onClick={() => buildPureSurebetsCoupon(b.cnt, builderScope, includedSports, dateFilter, lineRiskProfile)}
                         className={`py-2 px-2 rounded-lg text-xs font-bold border transition-all ${
                           activeSpecialMode === `TOP_${b.cnt}`
                             ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
@@ -1684,7 +1757,7 @@ export default function App() {
                     ].map((d) => (
                       <button
                         key={d.target}
-                        onClick={() => buildOptimalTwoMatchCombo(d.target, builderScope, includedSports, dateFilter)}
+                        onClick={() => buildOptimalTwoMatchCombo(d.target, builderScope, includedSports, dateFilter, lineRiskProfile)}
                         className={`py-2 px-2 rounded-lg text-xs font-bold border transition-all ${
                           activeSpecialMode === `DUO_${d.target}`
                             ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
@@ -1698,11 +1771,12 @@ export default function App() {
                 </div>
               </div>
 
+              {/* PASEK WYBORU RYNKU (Utrzymuje aktywny tryb Złoty Dublet / Top 2/3/4!) */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
                 {MARKET_SCOPES.map((ms) => (
                   <button
                     key={ms.id}
-                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, ms.id, includedSports, dateFilter, lineRiskProfile)}
+                    onClick={() => triggerCurrentModeRebuild(ms.id, includedSports, dateFilter, lineRiskProfile)}
                     className={`py-2 px-2 rounded-lg font-bold transition-all text-center ${
                       builderScope === ms.id
                         ? 'bg-orange-500 text-slate-950 shadow-md'
@@ -1718,7 +1792,7 @@ export default function App() {
                 {LINE_RISK_PROFILES.map((rp) => (
                   <button
                     key={rp.id}
-                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, includedSports, dateFilter, rp.id)}
+                    onClick={() => triggerCurrentModeRebuild(builderScope, includedSports, dateFilter, rp.id)}
                     className={`py-1.5 px-2 rounded-lg font-bold transition-all ${
                       lineRiskProfile === rp.id
                         ? 'bg-indigo-600 text-white shadow'
@@ -1741,7 +1815,7 @@ export default function App() {
                           ? (includedSports.length > 1 ? includedSports.filter((x) => x !== sp.id) : includedSports)
                           : [...includedSports, sp.id];
                         setIncludedSports(next);
-                        buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, next, dateFilter, lineRiskProfile);
+                        triggerCurrentModeRebuild(builderScope, next, dateFilter, lineRiskProfile);
                       }}
                       className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between transition-all ${
                         checked ? 'bg-emerald-500/15 border-emerald-500/60 text-white' : 'bg-slate-950 border-slate-800 text-slate-500'
@@ -1948,7 +2022,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* NA LIŚCIE SPOTKAŃ POKAZUJEMY PEŁNY WIDOK Z DRABINKAMI STS (includeLadders = true)! */}
                       {isExpanded && renderLabDetails(pick.match, true)}
                     </div>
                   );
