@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, Clock, Search, X, Stethoscope, AlertTriangle
 } from 'lucide-react';
 
-// ===========================================================================
+// ============================================================================
 // KATEGORIE SPORTOWE I ENDPOINTY LIVE API
 // ============================================================================
 const SPORT_GROUPS = [
@@ -18,14 +18,13 @@ const SPORT_GROUPS = [
 ];
 
 const LIVE_LEAGUE_ENDPOINTS = [
-  { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', path: 'basketball/nba', avgScore: 114.5, std: 12.0, deepScan: true },
-  { sport: 'BASKETBALL', country: 'USA (NCAA)', name: 'NCAA Basket', path: 'basketball/mens-college-basketball', avgScore: 74.5, std: 10.5, deepScan: false },
-  { sport: 'BASKETBALL', country: 'Międzynarodowe', name: 'Euro / FIBA', path: 'basketball/fiba', avgScore: 81.5, std: 9.5, deepScan: false },
+  { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', path: 'basketball/nba', avgScore: 114.5, std: 12.5, deepScan: true },
+  { sport: 'BASKETBALL', country: 'USA (NCAA)', name: 'NCAA Basket', path: 'basketball/mens-college-basketball', avgScore: 74.5, std: 11.0, deepScan: false },
   { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', path: 'hockey/nhl', avgScore: 3.1, std: 1.6, deepScan: true },
   { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', path: 'hockey/mens-college-hockey', avgScore: 3.0, std: 1.6, deepScan: false },
-  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.5, std: 3.5, deepScan: false },
-  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.5, std: 3.5, deepScan: false },
-  { sport: 'VOLLEYBALL', country: 'Międzynarodowe / Liga', name: 'Siatkówka Liga', path: 'volleyball/mens-college-volleyball', avgScore: 182.5, std: 14.0, deepScan: false },
+  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.0, std: 3.5, deepScan: false },
+  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.0, std: 3.5, deepScan: false },
+  { sport: 'VOLLEYBALL', country: 'Międzynarodowe / Liga', name: 'Siatkówka Liga', path: 'volleyball/mens-college-volleyball', avgScore: 181.5, std: 14.0, deepScan: false },
   { sport: 'SOCCER', country: 'Europa (LM)', name: 'Liga Mistrzów', path: 'soccer/uefa.champions', avgScore: 1.48, deepScan: true },
   { sport: 'SOCCER', country: 'Europa (LE)', name: 'Liga Europy', path: 'soccer/uefa.europa', avgScore: 1.42, deepScan: false },
   { sport: 'SOCCER', country: 'Anglia', name: 'Premier League', path: 'soccer/eng.1', avgScore: 1.52, deepScan: true },
@@ -43,6 +42,14 @@ const LIVE_LEAGUE_ENDPOINTS = [
   { sport: 'SOCCER', country: 'USA', name: 'MLS', path: 'soccer/usa.1', avgScore: 1.55, deepScan: false },
   { sport: 'SOCCER', country: 'Arabia Saudyjska', name: 'Saudi Pro League', path: 'soccer/sau.1', avgScore: 1.58, deepScan: false }
 ];
+
+// Lista najważniejszych gwiazd NBA/NHL (aby skaner kontuzji nigdy nie traktował ich jako zwykłej rotacji, gdy wypadną z pola "leaders")
+const SUPERSTAR_LASTNAMES = new Set([
+  'edwards', 'jokic', 'jokić', 'tatum', 'doncic', 'dončić', 'antetokounmpo', 'gilgeous-alexander',
+  'embiid', 'brunson', 'durant', 'booker', 'curry', 'james', 'davis', 'mitchell', 'haliburton',
+  'wembanyama', 'morant', 'sabonis', 'fox', 'banchero', 'cunningham', 'young', 'irving', 'lillard',
+  'mcdavid', 'mackinnon', 'matthews', 'kucherov', 'draisaitl', 'makar', 'panarin', 'barkov', 'kaprizov', 'hughes'
+]);
 
 // ============================================================================
 // FUNKCJE MATEMATYCZNE: GAUSS CDF, POISSON PMF, KONWERTER KURSÓW
@@ -71,19 +78,12 @@ function clamp(val, min, max) {
   return Math.min(max, Math.max(min, val));
 }
 
-function hashStrength(nameStr) {
-  let h = 0;
-  for (let i = 0; i < nameStr.length; i++) h = (h * 31 + nameStr.charCodeAt(i)) % 1000;
-  return 0.45 + (h / 1000) * 0.14;
-}
-
 function parseRecordString(recStr) {
   if (!recStr) return { wins: 0, losses: 0, ties: 0, games: 0, pct: null };
   const parts = recStr.split('-').map((n) => parseInt(n, 10));
   if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     const games = parts.reduce((a, b) => a + (isNaN(b) ? 0 : b), 0);
     if (games > 0) {
-      // W NHL bilans to W-L-OTL (np. 8-4-1, gdzie 1 to porażka po dogrywce warta ~0.35 punktu siły)
       const wins = parts[0] + (parts[2] ? parts[2] * 0.35 : 0);
       return { wins: parts[0], losses: parts[1], ties: parts[2] || 0, games, pct: wins / games };
     }
@@ -92,7 +92,7 @@ function parseRecordString(recStr) {
 }
 
 // ============================================================================
-// NAPRAWIONY PARSER TELEMETRII (Z walidacją jednostek meczowych per-game!)
+// PARSER TELEMETRII ZESPOŁU / ZAWODNIKA (Z obsługą Rankingu ATP/WTA i bez hashStrength!)
 // ============================================================================
 function parseCompetitorStats(comp, cfg, isHome = true) {
   const name = comp.team?.displayName || comp.team?.name || comp.athlete?.displayName || 'Zespół';
@@ -106,17 +106,31 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   const parsedTotal = parseRecordString(totalRecObj?.summary);
   const parsedSplit = isHome ? parseRecordString(homeRecObj?.summary) : parseRecordString(awayRecObj?.summary);
 
-  const rawWinPct = parsedTotal.pct !== null ? parsedTotal.pct : hashStrength(name);
+  // Sprawdzanie rankingu ATP/WTA lub rozstawienia turniejowego (seed)
+  const rawRank = comp.curatedRank?.current || comp.rank || comp.seed || comp.athlete?.rank || null;
+  const tennisRank = rawRank && rawRank > 0 && rawRank < 1500 ? Number(rawRank) : null;
+
+  // Czy mamy zweryfikowane dane o sile (prawdziwy bilans meczów lub ranking)?
+  const hasVerifiedData = parsedTotal.games > 0 || tennisRank !== null;
+
+  let rawWinPct = 0.50;
+  if (parsedTotal.pct !== null) {
+    rawWinPct = parsedTotal.pct;
+  } else if (tennisRank !== null) {
+    // Przeliczenie miejsca w rankingu WTA/ATP na siłę bazową (np. #10 -> 0.72, #100 -> 0.55, #500 -> 0.35)
+    rawWinPct = clamp(0.82 - Math.log10(Math.max(1, tennisRank)) * 0.16, 0.25, 0.80);
+  }
+
   const gamesPlayed = parsedTotal.games;
 
-  // Stabilizacja Bayesowska (k=14 meczów stabilizujących)
-  const kPrior = cfg.sport === 'BASKETBALL' ? 14 : cfg.sport === 'HOCKEY' ? 14 : 10;
+  // Silna stabilizacja Bayesowska na początku sezonu (k=26 dla NBA, aby bilans 5-0 vs 0-5 nie dawał 80% szans!)
+  const kPrior = cfg.sport === 'BASKETBALL' ? 26 : cfg.sport === 'HOCKEY' ? 18 : 12;
   const bayesianWinPct = gamesPlayed > 0
     ? (rawWinPct * gamesPlayed + 0.50 * kPrior) / (gamesPlayed + kPrior)
     : rawWinPct;
 
   const splitFactor = parsedSplit.pct !== null && parsedSplit.games >= 3
-    ? clamp((parsedSplit.pct - rawWinPct) * 0.25, -0.06, 0.06)
+    ? clamp((parsedSplit.pct - rawWinPct) * 0.20, -0.05, 0.05)
     : 0;
 
   const statsMap = {};
@@ -125,59 +139,57 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
     statsMap[key] = parseFloat(s.displayValue);
   });
 
-  // NAPRAWA BŁĘDU "128 : 3.1": Nigdy nie bierzemy surowego "points" (łącznych punktów z sezonu) jako średniej na mecz!
-  let avgPtsFor = cfg.avgScore * (0.92 + (bayesianWinPct + splitFactor - 0.50) * 0.32);
-  let avgPtsAgainst = cfg.avgScore * (1.08 - (bayesianWinPct + splitFactor - 0.50) * 0.32);
+  let avgPtsFor = cfg.avgScore * (0.93 + (bayesianWinPct + splitFactor - 0.50) * 0.26);
+  let avgPtsAgainst = cfg.avgScore * (1.07 - (bayesianWinPct + splitFactor - 0.50) * 0.26);
 
   if (cfg.sport === 'BASKETBALL') {
     const rawPpg = statsMap.avgpoints || statsMap.ppg;
-    if (rawPpg && rawPpg > 55 && rawPpg < 140) avgPtsFor = rawPpg;
-    avgPtsFor = clamp(avgPtsFor, cfg.avgScore * 0.85, cfg.avgScore * 1.15);
-    avgPtsAgainst = clamp(avgPtsAgainst, cfg.avgScore * 0.85, cfg.avgScore * 1.15);
+    if (rawPpg && rawPpg > 55 && rawPpg < 135) avgPtsFor = rawPpg;
+    avgPtsFor = clamp(avgPtsFor, cfg.avgScore * 0.88, cfg.avgScore * 1.12);
+    avgPtsAgainst = clamp(avgPtsAgainst, cfg.avgScore * 0.88, cfg.avgScore * 1.12);
   } else if (cfg.sport === 'HOCKEY') {
     const rawGpg = statsMap.avggoals || (statsMap.goals && gamesPlayed > 0 ? statsMap.goals / gamesPlayed : null);
-    if (rawGpg && rawGpg > 1.5 && rawGpg < 5.0) avgPtsFor = rawGpg;
-    avgPtsFor = clamp(avgPtsFor, 2.20, 4.00);
-    avgPtsAgainst = clamp(avgPtsAgainst, 2.20, 4.00);
+    if (rawGpg && rawGpg > 1.6 && rawGpg < 4.6) avgPtsFor = rawGpg;
+    avgPtsFor = clamp(avgPtsFor, 2.30, 3.85);
+    avgPtsAgainst = clamp(avgPtsAgainst, 2.30, 3.85);
   } else if (cfg.sport === 'SOCCER') {
     const rawGpg = statsMap.avggoals || (statsMap.goalsfor && gamesPlayed > 0 ? statsMap.goalsfor / gamesPlayed : null);
-    if (rawGpg && rawGpg > 0.4 && rawGpg < 3.5) avgPtsFor = rawGpg;
-    avgPtsFor = clamp(avgPtsFor, 0.80, 2.50);
-    avgPtsAgainst = clamp(avgPtsAgainst, 0.75, 2.40);
+    if (rawGpg && rawGpg > 0.5 && rawGpg < 3.2) avgPtsFor = rawGpg;
+    avgPtsFor = clamp(avgPtsFor, 0.85, 2.35);
+    avgPtsAgainst = clamp(avgPtsAgainst, 0.80, 2.25);
   }
 
-  // Oczekiwana Siła Pitagorejska (zawsze w realistycznym przedziale 28% - 72%)
-  const expGamma = cfg.sport === 'BASKETBALL' ? 11.5 : 2.0;
+  const expGamma = cfg.sport === 'BASKETBALL' ? 10.5 : 2.0;
   const rawPyth = Math.pow(avgPtsFor, expGamma) / (Math.pow(avgPtsFor, expGamma) + Math.pow(avgPtsAgainst, expGamma));
-  const pythagoreanWinPct = clamp(rawPyth, 0.28, 0.72);
+  const pythagoreanWinPct = clamp(rawPyth, 0.32, 0.68);
 
-  // Four Factors / Skuteczność
-  const fgPct = clamp(statsMap.fieldgoalpct || statsMap.fgp || (45.5 + (bayesianWinPct - 0.5) * 8), 38.0, 56.0);
-  const threePct = clamp(statsMap.threepointfieldgoalpct || statsMap.threepointpct || (35.5 + (bayesianWinPct - 0.5) * 6), 28.0, 44.0);
+  const fgPct = clamp(statsMap.fieldgoalpct || statsMap.fgp || (45.5 + (bayesianWinPct - 0.5) * 7), 40.0, 54.0);
+  const threePct = clamp(statsMap.threepointfieldgoalpct || statsMap.threepointpct || (35.5 + (bayesianWinPct - 0.5) * 5), 30.0, 42.0);
   const efgPct = Number((fgPct + 0.5 * (threePct * 0.35)).toFixed(1));
-  const rebounds = Number(clamp(statsMap.avgRebounds || statsMap.rebounds || (43.0 + (bayesianWinPct - 0.5) * 5), 35.0, 52.0).toFixed(1));
-  const turnovers = Number(clamp(statsMap.avgTurnovers || statsMap.turnovers || (13.5 - (bayesianWinPct - 0.5) * 2.5), 9.5, 18.5).toFixed(1));
+  const rebounds = Number(clamp(statsMap.avgRebounds || statsMap.rebounds || (43.0 + (bayesianWinPct - 0.5) * 4), 38.0, 49.0).toFixed(1));
+  const turnovers = Number(clamp(statsMap.avgTurnovers || statsMap.turnovers || (13.5 - (bayesianWinPct - 0.5) * 2), 10.5, 17.0).toFixed(1));
 
-  const fourFactorsIndex = (efgPct - 52.0) * 0.35 + (rebounds - 43.0) * 0.15 - (turnovers - 13.5) * 0.25;
+  const fourFactorsIndex = (efgPct - 52.0) * 0.30 + (rebounds - 43.0) * 0.12 - (turnovers - 13.5) * 0.20;
 
-  // Złożony Composite Power Rating (w realistycznym przedziale 0.32 - 0.68)
   const compositePower = clamp(
-    bayesianWinPct * 0.50 + pythagoreanWinPct * 0.35 + (0.50 + splitFactor) * 0.15,
-    0.30,
-    0.70
+    bayesianWinPct * 0.55 + pythagoreanWinPct * 0.30 + (0.50 + splitFactor) * 0.15,
+    0.34,
+    0.66
   );
 
   const leaderObj = comp.leaders?.[0]?.leaders?.[0];
-  const leaderName = leaderObj?.athlete?.displayName || leaderObj?.athlete?.shortName || comp.athlete?.displayName || 'Skład podstawowy';
+  const leaderName = leaderObj?.athlete?.displayName || leaderObj?.athlete?.shortName || comp.athlete?.displayName || 'Skład meczowy';
   const leaderStat = leaderObj?.displayValue || '';
 
   return {
     name,
     short,
-    record: totalRecObj?.summary || 'Sezon Live',
+    record: totalRecObj?.summary || (tennisRank ? `Rank #${tennisRank}` : 'Brak bilansu'),
     splitRecord: isHome
-      ? (homeRecObj?.summary ? `Dom: ${homeRecObj.summary}` : `W%: ${Math.round(compositePower * 100)}%`)
-      : (awayRecObj?.summary ? `Wyjazd: ${awayRecObj.summary}` : `W%: ${Math.round(compositePower * 100)}%`),
+      ? (homeRecObj?.summary ? `Dom: ${homeRecObj.summary}` : `Siła: ${Math.round(compositePower * 100)}%`)
+      : (awayRecObj?.summary ? `Wyjazd: ${awayRecObj.summary}` : `Siła: ${Math.round(compositePower * 100)}%`),
+    tennisRank,
+    hasVerifiedData,
     gamesPlayed,
     bayesianWinPct: Number(bayesianWinPct.toFixed(3)),
     pythagoreanWinPct: Number(pythagoreanWinPct.toFixed(3)),
@@ -194,14 +206,13 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
 }
 
 // ============================================================================
-// SKANER KONTUZJI (Skalibrowany pod dyscyplinę: bramki w NHL vs punkty w NBA)
+// SKANER KONTUZJI (Rozpoznaje gwiazdy takie jak Anthony Edwards nawet gdy są OUT!)
 // ============================================================================
 function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
   if (!Array.isArray(injuriesArr) || injuriesArr.length === 0) {
     return { list: [], penalty: 0 };
   }
 
-  // W koszykówce wpływ pojedynczego gracza wyrażamy w punktach (np. 1.8 pkt), a w hokeju/piłce w ułamkach gola (np. 0.12 gola)
   const unitScale = sport === 'BASKETBALL' ? 1.0 : 0.12;
   let totalPenalty = 0;
   let benchAcc = 0;
@@ -213,9 +224,10 @@ function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
     const statusRaw = (item.status || item.type?.description || 'Out').toUpperCase();
     const pos = item.athlete?.position?.abbreviation || '';
 
-    const isLeader = teamStats.leaderLastName && last.length > 2 && teamStats.leaderLastName === last;
-    const basePts = isLeader ? 2.2 : 0.65;
-    const roleTag = isLeader ? 'LIDER' : (pos ? `Rotacja (${pos})` : 'Rotacja');
+    // Naprawa błędu z filmu: Sprawdzamy zarówno aktywnego lidera, jak i globalną bazę gwiazd NBA/NHL!
+    const isStar = SUPERSTAR_LASTNAMES.has(last) || (teamStats.leaderLastName && last.length > 2 && teamStats.leaderLastName === last);
+    const basePts = isStar ? 2.6 : 0.55;
+    const roleTag = isStar ? 'GWIAZDA / LIDER' : (pos ? `Rotacja (${pos})` : 'Rotacja');
 
     let mult = 0;
     let statusShort = 'OUT';
@@ -233,10 +245,10 @@ function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
 
     const rawImpact = basePts * mult;
     if (rawImpact > 0) {
-      if (isLeader) {
+      if (isStar) {
         totalPenalty += rawImpact;
-      } else if (benchAcc < 1.8) {
-        const add = Math.min(rawImpact, 1.8 - benchAcc);
+      } else if (benchAcc < 1.4) {
+        const add = Math.min(rawImpact, 1.4 - benchAcc);
         benchAcc += add;
         totalPenalty += add;
       }
@@ -249,7 +261,7 @@ function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
     }
   });
 
-  const maxCap = sport === 'BASKETBALL' ? 4.2 : 0.45;
+  const maxCap = sport === 'BASKETBALL' ? 4.5 : 0.45;
   return {
     list: parsed.slice(0, 5),
     penalty: Number(Math.min(maxCap, totalPenalty * unitScale).toFixed(2))
@@ -265,8 +277,8 @@ function extractRealBookieOdds(comp, homeAbbr) {
   const mlAwayRaw = oddsObj.awayTeamOdds?.moneyLine ?? oddsObj.moneyline?.away?.close?.odds;
   const mlDrawRaw = oddsObj.drawOdds?.moneyLine;
 
-  const realHomeOdd = americanToDecimal(mlHomeRaw);
-  const realAwayOdd = americanToDecimal(mlAwayRaw);
+  let realHomeOdd = americanToDecimal(mlHomeRaw);
+  let realAwayOdd = americanToDecimal(mlAwayRaw);
   const realDrawOdd = americanToDecimal(mlDrawRaw);
 
   let realSpreadHome = null;
@@ -286,7 +298,7 @@ function extractRealBookieOdds(comp, homeAbbr) {
 }
 
 // ============================================================================
-// SKALIBROWANY SILNIK SYMULACYJNY (Realistyczne przedziały % i brak anomalii!)
+// SKALIBROWANY SILNIK SYMULACYJNY
 // ============================================================================
 function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const { homeTeam, awayTeam, sport, cfg, liveInjuries, realOddsInfo } = match;
@@ -294,25 +306,28 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const aPen = (liveInjuries?.awayPenalty || 0) + (customMod.aInj || 0);
   const netInjDiff = aPen - hPen;
 
-  // 1. PIŁKA NOŻNA ORAZ HOKEJ (Rozkład Poissona Expected Goals xG)
-  if (sport === 'SOCCER' || sport === 'HOCKEY') {
-    const baseG = cfg.avgScore || (sport === 'HOCKEY' ? 3.05 : 1.42);
-    const hAdv = sport === 'HOCKEY' ? 0.18 : 0.22; // Przewaga własnego lodu/boiska w golach
+  // Sprawdzenie, czy mecz ma twarde pokrycie w danych (bilans, ranking lub kursy z API)
+  const hasHardData =
+    homeTeam.hasVerifiedData ||
+    awayTeam.hasVerifiedData ||
+    Boolean(realOddsInfo?.realHomeOdd) ||
+    Boolean(realOddsInfo?.realSpreadHome);
 
-    // Różnica oczekiwanych goli wynikająca ze statystyk
-    const statDiff = (homeTeam.compositePower - awayTeam.compositePower) * (sport === 'HOCKEY' ? 2.4 : 1.8) + hAdv + netInjDiff;
+  // 1. PIŁKA NOŻNA ORAZ HOKEJ
+  if (sport === 'SOCCER' || sport === 'HOCKEY') {
+    const hAdv = sport === 'HOCKEY' ? 0.16 : 0.20;
+    const statDiff = (homeTeam.compositePower - awayTeam.compositePower) * (sport === 'HOCKEY' ? 2.1 : 1.6) + hAdv + netInjDiff;
     const baseTotal = realOddsInfo?.totalLine || (homeTeam.avgPtsFor + awayTeam.avgPtsFor);
 
     let finalDiff = statDiff;
     if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
       const pMktH = (1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd);
-      const mktDiff = (pMktH - 0.5) * (sport === 'HOCKEY' ? 2.5 : 1.9);
-      finalDiff = mktDiff * 0.55 + statDiff * 0.45;
+      const mktDiff = (pMktH - 0.5) * (sport === 'HOCKEY' ? 2.4 : 1.8);
+      finalDiff = mktDiff * 0.65 + statDiff * 0.35;
     }
 
-    // Sztywne, realistyczne widełki oczekiwanych bramek (np. w NHL od 1.8 do 4.2 gola, nigdy 8.8 : 0.5!)
-    const minG = sport === 'HOCKEY' ? 1.85 : 0.55;
-    const maxG = sport === 'HOCKEY' ? 4.25 : 2.85;
+    const minG = sport === 'HOCKEY' ? 2.05 : 0.65;
+    const maxG = sport === 'HOCKEY' ? 3.95 : 2.55;
     const lambdaH = clamp(baseTotal / 2 + finalDiff / 2, minG, maxG);
     const lambdaA = clamp(baseTotal / 2 - finalDiff / 2, minG, maxG);
 
@@ -331,15 +346,12 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
     }
 
     const tot = pH + pD + pA || 1;
-    // W hokeju zakład 2-drogowy (Moneyline z OT) oraz 3-drogowy (60m)
-    const regHome = clamp((pH / tot) * 100, 16, 68);
-    const regDraw = clamp((pD / tot) * 100, 16, 30);
-    const regAway = clamp(100 - regHome - regDraw, 16, 68);
+    const regHome = clamp((pH / tot) * 100, 18, 65);
+    const regDraw = clamp((pD / tot) * 100, 18, 30);
+    const regAway = clamp(100 - regHome - regDraw, 18, 65);
 
-    const mlHome = clamp(((pH + pD * 0.52) / tot) * 100, 24, 76);
+    const mlHome = clamp(((pH + pD * 0.52) / tot) * 100, 28, 72);
     const mlAway = 100 - mlHome;
-
-    // Dla NHL kurs z ESPN to kurs Moneyline (2-drogowy z dogrywką), więc używamy mlHome/mlAway dla spójności z kursem!
     const useMoneylineProbs = sport === 'HOCKEY' && !realOddsInfo?.realDrawOdd;
 
     return {
@@ -352,75 +364,84 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       expHome: lambdaH,
       expAway: lambdaA,
       expTotal: lambdaH + lambdaA,
-      overProb: clamp(pOver * 100, 32, 68),
+      overProb: clamp(pOver * 100, 36, 62),
       totalLine: lineOU,
       netInjDiff,
+      hasHardData,
       modelTag: sport === 'SOCCER' ? 'Poisson xG (90m 1X2)' : 'NHL Poisson xG (Moneyline z OT)'
     };
   }
 
-  // 2. TENIS & SIATKÓWKA
+  // 2. TENIS & SIATKÓWKA (Naprawiona linia gemów zależna od faworyta!)
   if (sport === 'TENNIS' || sport === 'VOLLEYBALL') {
-    const eloH = 1850 + homeTeam.compositePower * 340 - hPen * 25;
-    const eloA = 1850 + awayTeam.compositePower * 340 - aPen * 25;
+    const eloH = 1850 + homeTeam.compositePower * 360 - hPen * 25;
+    const eloA = 1850 + awayTeam.compositePower * 360 - aPen * 25;
     let pH = (1 / (1 + Math.pow(10, -(eloH - eloA) / 400))) * 100;
 
     if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
       const mktP = ((1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd)) * 100;
-      pH = mktP * 0.60 + pH * 0.40;
+      pH = mktP * 0.70 + pH * 0.30;
     }
 
-    pH = clamp(pH, 18, 82);
+    pH = clamp(pH, 15, 85);
+    // Im większa przewaga faworyta, tym krótszy mecz i niższa linia gemów (np. 16.5 - 18.5 zamiast sztywnego 21.5!)
     const closeness = 1 - Math.abs(pH - 50) / 50;
-    const expTotal = sport === 'VOLLEYBALL' ? 176 + closeness * 14 : 20.2 + closeness * 3.8;
-    const lineOU = realOddsInfo?.totalLine || (sport === 'VOLLEYBALL' ? 181.5 : 21.5);
-    const overProb = clamp((1 - normalCDF(lineOU, expTotal, sport === 'VOLLEYBALL' ? 13.5 : 3.8)) * 100, 34, 66);
+    const dynamicTennisLine = closeness < 0.45 ? 17.5 : closeness < 0.70 ? 19.5 : 21.5;
+    const lineOU = realOddsInfo?.totalLine || (sport === 'VOLLEYBALL' ? 180.5 : dynamicTennisLine);
+    const expTotal = sport === 'VOLLEYBALL' ? 175 + closeness * 12 : 16.5 + closeness * 5.8;
+
+    // Jeżeli nie mamy twardych danych (np. kwalifikacje WTA bez rankingu i kursów w API), nie pompujemy Overa do 66%!
+    const rawOverProb = (1 - normalCDF(lineOU, expTotal, sport === 'VOLLEYBALL' ? 13.5 : 3.6)) * 100;
+    const overProb = hasHardData ? clamp(rawOverProb, 38, 61) : 50.0;
 
     return {
       homeWinProb: pH,
       drawProb: 0,
       awayWinProb: 100 - pH,
-      expHome: pH >= 50 ? 2.0 : 1.1,
-      expAway: pH >= 50 ? 1.1 : 2.0,
+      expHome: pH >= 50 ? 2.0 : 0.8,
+      expAway: pH >= 50 ? 0.8 : 2.0,
       expTotal,
       overProb,
       totalLine: lineOU,
       netInjDiff,
-      modelTag: sport === 'TENNIS' ? 'Surface ELO + Form Index' : 'Volley Set-Point Gauss'
+      hasHardData,
+      modelTag: sport === 'TENNIS' ? 'ATP/WTA Rank ELO' : 'Volley Set-Point Gauss'
     };
   }
 
-  // 3. KOSZYKÓWKA (NBA / NCAA / FIBA)
+  // 3. KOSZYKÓWKA (NBA / NCAA) - Mocne kotwiczenie na starcie sezonu (brak kursów 1.16 na wyrównane mecze!)
   const basePts = cfg.avgScore || 114.0;
-  const stdGame = cfg.std || 12.0;
+  const stdGame = cfg.std || 12.5;
 
-  const powerMargin = (homeTeam.compositePower - awayTeam.compositePower) * 18.0;
-  const fourFactorsMargin = (homeTeam.fourFactorsIndex - awayTeam.fourFactorsIndex) * 0.45;
-  const homeCourtBonus = 2.4;
+  const powerMargin = (homeTeam.compositePower - awayTeam.compositePower) * 14.0;
+  const fourFactorsMargin = (homeTeam.fourFactorsIndex - awayTeam.fourFactorsIndex) * 0.35;
+  const homeCourtBonus = 2.2;
 
-  let expectedMarginHome = powerMargin + fourFactorsMargin + homeCourtBonus + netInjDiff * 0.80;
+  let expectedMarginHome = powerMargin + fourFactorsMargin + homeCourtBonus + netInjDiff * 0.85;
 
   if (realOddsInfo?.realSpreadHome !== null && realOddsInfo?.realSpreadHome !== undefined) {
     const bookieMarginHome = -realOddsInfo.realSpreadHome;
-    expectedMarginHome = bookieMarginHome * 0.60 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.40 + netInjDiff * 0.65;
+    expectedMarginHome = bookieMarginHome * 0.70 + expectedMarginHome * 0.30;
   } else if (realOddsInfo?.realHomeOdd && realOddsInfo?.realAwayOdd) {
     const pMktH = (1 / realOddsInfo.realHomeOdd) / (1 / realOddsInfo.realHomeOdd + 1 / realOddsInfo.realAwayOdd);
-    const mktMargin = (pMktH - 0.5) * 25.0;
-    expectedMarginHome = mktMargin * 0.60 + (powerMargin + fourFactorsMargin + homeCourtBonus) * 0.40 + netInjDiff * 0.65;
+    const mktMargin = (pMktH - 0.5) * 24.0;
+    expectedMarginHome = mktMargin * 0.70 + expectedMarginHome * 0.30;
   }
 
-  expectedMarginHome = clamp(expectedMarginHome, -14.5, 14.5);
+  // Ograniczenie maksymalnego spreadu bez kursów do +/- 7.5 pkt (co odpowiada max ~72% szansy i kursowi ~1.35)
+  const maxAllowedMargin = (realOddsInfo?.realHomeOdd || realOddsInfo?.realSpreadHome) ? 12.5 : 7.2;
+  expectedMarginHome = clamp(expectedMarginHome, -maxAllowedMargin, maxAllowedMargin);
 
   const statTotal = homeTeam.avgPtsFor + awayTeam.avgPtsFor;
-  const totalTarget = realOddsInfo?.totalLine ? (realOddsInfo.totalLine * 0.65 + statTotal * 0.35) : statTotal || basePts * 2;
+  const totalTarget = realOddsInfo?.totalLine ? (realOddsInfo.totalLine * 0.70 + statTotal * 0.30) : statTotal || basePts * 2;
 
   const expHome = totalTarget / 2 + expectedMarginHome / 2;
   const expAway = totalTarget / 2 - expectedMarginHome / 2;
   const expTotal = expHome + expAway;
 
-  const homeWinProb = clamp((1 - normalCDF(0, expectedMarginHome, stdGame)) * 100, 16, 84);
+  const homeWinProb = clamp((1 - normalCDF(0, expectedMarginHome, stdGame)) * 100, 24, 76);
   const lineOU = realOddsInfo?.totalLine || Math.round(expTotal * 2) / 2;
-  const overProb = clamp((1 - normalCDF(lineOU, expTotal, stdGame * 1.4)) * 100, 34, 66);
+  const overProb = clamp((1 - normalCDF(lineOU, expTotal, stdGame * 1.4)) * 100, 38, 62);
 
   return {
     homeWinProb,
@@ -432,67 +453,18 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
     overProb,
     totalLine: lineOU,
     netInjDiff,
+    hasHardData,
     modelTag: 'Four Factors + Pythagorean + Live Injuries'
   };
 }
 
-function generateDynamicFallbackEvents(nowMs) {
-  const templates = [
-    { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', h: 'Philadelphia 76ers', a: 'New York Knicks', hRec: '4-1', aRec: '2-3', offsetH: 3.5, avgScore: 114.5, std: 12.0, realH: 1.98, realA: 1.88, total: 224.5 },
-    { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', h: 'Minnesota Timberwolves', a: 'LA Clippers', hRec: '3-2', aRec: '1-3', offsetH: 4.0, avgScore: 114.5, std: 12.0, realH: 1.37, realA: 3.10, total: 223.5 },
-    { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', h: 'Calgary Flames', a: 'Seattle Kraken', hRec: '5-7-0', aRec: '8-4-1', offsetH: 3.0, avgScore: 3.1, std: 1.6, realH: 1.95, realA: 1.87, total: 6.5 },
-    { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', h: 'Vegas Golden Knights', a: 'New Jersey Devils', hRec: '9-4-1', aRec: '8-5-0', offsetH: 2.0, avgScore: 3.1, std: 1.6, realH: 1.85, realA: 1.98, total: 6.5 }
-  ];
-
-  return templates.map((t, idx) => {
-    const eventTimeMs = nowMs + t.offsetH * 3600000;
-    const evDateObj = new Date(eventTimeMs);
-    const dateStr = evDateObj.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = evDateObj.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-    const dayBucket = t.offsetH <= 18 ? 'TODAY' : t.offsetH <= 42 ? 'TOMORROW' : 'DAY2';
-
-    const cfg = { sport: t.sport, country: t.country, name: t.name, avgScore: t.avgScore, std: t.std };
-    const homeTeam = parseCompetitorStats({ team: { displayName: t.h }, records: [{ summary: t.hRec }] }, cfg, true);
-    const awayTeam = parseCompetitorStats({ team: { displayName: t.a }, records: [{ summary: t.aRec }] }, cfg, false);
-
-    const m = {
-      id: `dyn_${idx}`,
-      sport: t.sport,
-      country: t.country,
-      leagueName: `${t.country} • ${t.name}`,
-      homeTeam,
-      awayTeam,
-      cfg,
-      realOddsInfo: { realHomeOdd: t.realH, realAwayOdd: t.realA, totalLine: t.total },
-      liveInjuries: { home: [], away: [], homePenalty: 0, awayPenalty: 0 },
-      eventTimeMs,
-      dateLabel: `${dateStr} • ${timeStr}`,
-      dayBucket,
-      venue: t.name,
-      bookieOdds: {}
-    };
-    const sim = computeDynamicPrediction(m);
-    const margin = 1.055;
-    m.sim = sim;
-    m.bookieOdds = {
-      home: t.realH || Number(Math.max(1.16, (100 / sim.homeWinProb) / margin).toFixed(2)),
-      draw: sim.drawProb > 0 ? Number(Math.max(2.85, (100 / sim.drawProb) / margin).toFixed(2)) : null,
-      away: t.realA || Number(Math.max(1.16, (100 / sim.awayWinProb) / margin).toFixed(2)),
-      totalLine: sim.totalLine,
-      overOdds: 1.88,
-      underOdds: 1.88
-    };
-    return m;
-  });
-}
-
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v6.5 STRICT REALISM & CLAMPED TELEMETRY)
+// GŁÓWNY KOMPONENT APLIKACJI (v6.6)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncInfo, setSyncInfo] = useState('Skanowanie telemetrii meczowej, Four Factors i raportów kontuzji...');
+  const [syncInfo, setSyncInfo] = useState('Skanowanie telemetrii meczowej, rankingów i raportów kontuzji...');
 
   const [mainTab, setMainTab] = useState('builder');
   const [mobileCouponModalOpen, setMobileCouponModalOpen] = useState(false);
@@ -606,16 +578,32 @@ export default function App() {
         })
       );
 
+      // KROK 2: POBIERANIE KONTUZJI ORAZ DODATKOWYCH KURSÓW Z PICKCENTER (summary?event=ID)
       const allCollected = Array.from(collectedMap.values());
-      const matchesForInjuryScan = allCollected.filter((m) => m.cfg.deepScan && m.dayBucket === 'TODAY').slice(0, 18);
+      const matchesForDeepScan = allCollected.filter((m) => m.cfg.deepScan && (m.dayBucket === 'TODAY' || m.dayBucket === 'TOMORROW')).slice(0, 22);
 
       await Promise.allSettled(
-        matchesForInjuryScan.map(async (m) => {
+        matchesForDeepScan.map(async (m) => {
           try {
             const sumUrl = `https://site.api.espn.com/apis/site/v2/sports/${m.cfg.path}/summary?event=${m.rawEventId}`;
             const sumRes = await fetch(sumUrl);
             if (!sumRes.ok) return;
             const sumData = await sumRes.json();
+
+            // Wyciągnięcie kursów z pickcenter, jeśli nie było ich na głównej tablicy scoreboard
+            if (!m.realOddsInfo.realHomeOdd && Array.isArray(sumData.pickcenter) && sumData.pickcenter.length > 0) {
+              const pc = sumData.pickcenter[0];
+              const hOdd = americanToDecimal(pc.homeTeamOdds?.moneyLine);
+              const aOdd = americanToDecimal(pc.awayTeamOdds?.moneyLine);
+              if (hOdd && aOdd) {
+                m.realOddsInfo.realHomeOdd = hOdd;
+                m.realOddsInfo.realAwayOdd = aOdd;
+              }
+              if (typeof pc.spread === 'number') {
+                m.realOddsInfo.realSpreadHome = pc.homeTeamOdds?.favorite ? -Math.abs(pc.spread) : Math.abs(pc.spread);
+              }
+              if (pc.overUnder) m.realOddsInfo.totalLine = Number(pc.overUnder);
+            }
 
             if (Array.isArray(sumData.injuries) && sumData.injuries.length > 0) {
               const hInjObj = sumData.injuries.find(
@@ -636,7 +624,7 @@ export default function App() {
               };
             }
           } catch (e) {
-            // Ignoruj błędy pojedynczych zapytań
+            // Kontynuuj
           }
         })
       );
@@ -648,19 +636,13 @@ export default function App() {
         const margin = 1.055;
         m.sim = sim;
         m.bookieOdds = {
-          home: m.realOddsInfo.realHomeOdd || Number(Math.max(1.16, (100 / sim.homeWinProb) / margin).toFixed(2)),
-          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? Number(Math.max(2.85, (100 / sim.drawProb) / margin).toFixed(2)) : null),
-          away: m.realOddsInfo.realAwayOdd || Number(Math.max(1.16, (100 / sim.awayWinProb) / margin).toFixed(2)),
+          home: m.realOddsInfo.realHomeOdd || Number(Math.max(1.22, (100 / sim.homeWinProb) / margin).toFixed(2)),
+          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? Number(Math.max(2.90, (100 / sim.drawProb) / margin).toFixed(2)) : null),
+          away: m.realOddsInfo.realAwayOdd || Number(Math.max(1.22, (100 / sim.awayWinProb) / margin).toFixed(2)),
           totalLine: sim.totalLine,
           overOdds: 1.88,
           underOdds: 1.88
         };
-      });
-
-      const fallbackList = generateDynamicFallbackEvents(nowMs);
-      fallbackList.forEach((fb) => {
-        const hasSport = allCollected.some((m) => m.sport === fb.sport);
-        if (!hasSport || allCollected.length < 6) allCollected.push(fb);
       });
 
       const finalArr = allCollected.sort((a, b) => a.eventTimeMs - b.eventTimeMs);
@@ -671,9 +653,7 @@ export default function App() {
         `Telemetria Live (${nowTime}): ${finalArr.length} meczów • Uwzględniono ${totalInjuriesCount} raportów kontuzji`
       );
     } catch (err) {
-      const fb = generateDynamicFallbackEvents(nowMs);
-      setMatches(fb);
-      if (fb.length > 0) setLabSelectedMatchId(fb[0].id);
+      setSyncInfo('Błąd sieci podczas synchronizacji.');
     } finally {
       setIsLoading(false);
     }
@@ -713,6 +693,7 @@ export default function App() {
         prob: sim.homeWinProb,
         ev: evH,
         projStr,
+        hasHardData: sim.hasHardData,
         score: sim.homeWinProb * 0.78 + clamp(evH, -15, 25) * 1.1
       });
 
@@ -730,27 +711,32 @@ export default function App() {
         prob: sim.awayWinProb,
         ev: evA,
         projStr,
+        hasHardData: sim.hasHardData,
         score: sim.awayWinProb * 0.78 + clamp(evA, -15, 25) * 1.1
       });
 
-      const idOU = `${m.id}_OU`;
-      const isOver = sim.overProb >= 50;
-      const probOU = isOver ? sim.overProb : 100 - sim.overProb;
-      const oddOU = customOddsMap[idOU] ?? (isOver ? bookieOdds.overOdds : bookieOdds.underOdds);
-      const evOU = ((probOU / 100) * (oddOU * taxMult) - 1) * 100;
-      list.push({
-        id: idOU,
-        match: m,
-        sport: m.sport,
-        sportIcon,
-        marketType: 'TOTAL',
-        selectionName: `${isOver ? 'Powyżej (Over)' : 'Poniżej (Under)'} ${sim.totalLine}`,
-        odds: oddOU,
-        prob: probOU,
-        ev: evOU,
-        projStr,
-        score: probOU * 0.72 + clamp(evOU, -15, 25) * 1.1
-      });
+      // Rynek Over/Under dodajemy tylko wtedy, gdy mecz ma zweryfikowane dane (blokada ślepych Overów 21.5 w kwalifikacjach WTA!)
+      if (sim.hasHardData) {
+        const idOU = `${m.id}_OU`;
+        const isOver = sim.overProb >= 50;
+        const probOU = isOver ? sim.overProb : 100 - sim.overProb;
+        const oddOU = customOddsMap[idOU] ?? (isOver ? bookieOdds.overOdds : bookieOdds.underOdds);
+        const evOU = ((probOU / 100) * (oddOU * taxMult) - 1) * 100;
+        list.push({
+          id: idOU,
+          match: m,
+          sport: m.sport,
+          sportIcon,
+          marketType: 'TOTAL',
+          selectionName: `${isOver ? 'Powyżej (Over)' : 'Poniżej (Under)'} ${sim.totalLine}`,
+          odds: oddOU,
+          prob: probOU,
+          ev: evOU,
+          projStr,
+          hasHardData: true,
+          score: probOU * 0.72 + clamp(evOU, -15, 25) * 1.1
+        });
+      }
     });
 
     return list.sort((a, b) => {
@@ -772,6 +758,7 @@ export default function App() {
     });
   }, [allPicks, dateFilter, activeSport, activeCountry, marketFilter, searchQuery]);
 
+  // Automatyczny kreator kuponu bierze TYLKO mecze ze zweryfikowanymi statystykami/rankingiem (p.hasHardData === true)!
   const buildAutoCoupon = (minOdds = targetMinOdds, strat = builderStrategy, scope = builderScope, sports = includedSports, dFilter = dateFilter) => {
     setTargetMinOdds(minOdds);
     setBuilderStrategy(strat);
@@ -779,10 +766,11 @@ export default function App() {
 
     let pool = allPicks.filter(
       (p) =>
+        p.hasHardData &&
         sports.includes(p.sport) &&
         (dFilter === 'ALL_UPCOMING' || p.match.dayBucket === dFilter) &&
-        p.odds >= 1.16 &&
-        p.prob >= 48
+        p.odds >= 1.20 &&
+        p.prob >= 50
     );
 
     if (scope === 'ML_ONLY') pool = pool.filter((p) => p.marketType === 'ML');
@@ -847,6 +835,7 @@ export default function App() {
     };
   }, [couponPicks, taxRate, couponStake]);
 
+  // Kafelek telemetrii dostosowany do konkretnego sportu (bez koszykarskich zbiórek w piłce i tenisie!)
   const renderLabDetails = (m) => {
     const { homeTeam, awayTeam, sim, liveInjuries } = m;
     const hInj = liveInjuries?.home || [];
@@ -857,7 +846,7 @@ export default function App() {
       <div className="mt-3 pt-3 border-t border-indigo-500/40 bg-slate-950/95 rounded-xl p-3.5 text-xs space-y-3">
         <div className="flex items-center justify-between">
           <span className="font-bold text-indigo-400 uppercase tracking-wider text-[10px]">
-            🔬 Pełna Telemetria Modelu • {sim.modelTag}
+            🔬 Telemetria Spotkania • {sim.modelTag}
           </span>
           <span className="text-[11px] text-slate-400 font-mono">{m.dateLabel}</span>
         </div>
@@ -882,7 +871,7 @@ export default function App() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center font-mono text-[11px]">
           <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Bilans & Dom/Wyjazd</div>
+            <div className="text-[9px] text-slate-400 uppercase">Bilans / Ranking</div>
             <div className="text-white font-bold mt-0.5">
               {awayTeam.record} vs <span className="text-orange-400">{homeTeam.record}</span>
             </div>
@@ -901,15 +890,38 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Four Factors (eFG% / Zb.)</div>
-            <div className="text-indigo-300 font-bold mt-0.5">
-              {awayTeam.efgPct}% vs <span className="text-orange-400">{homeTeam.efgPct}%</span>
+          {/* Kafelek nr 3 dopasowany ściśle do dyscypliny sportowej! */}
+          {m.sport === 'BASKETBALL' ? (
+            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+              <div className="text-[9px] text-slate-400 uppercase">Four Factors (eFG% / Zb.)</div>
+              <div className="text-indigo-300 font-bold mt-0.5">
+                {awayTeam.efgPct}% vs <span className="text-orange-400">{homeTeam.efgPct}%</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5">
+                REB: {awayTeam.rebounds}/{homeTeam.rebounds} • TOV: {awayTeam.turnovers}/{homeTeam.turnovers}
+              </div>
             </div>
-            <div className="text-[9px] text-slate-400 mt-0.5">
-              REB: {awayTeam.rebounds}/{homeTeam.rebounds} • TOV: {awayTeam.turnovers}/{homeTeam.turnovers}
+          ) : m.sport === 'TENNIS' ? (
+            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+              <div className="text-[9px] text-slate-400 uppercase">Profil ATP/WTA</div>
+              <div className="text-indigo-300 font-bold mt-0.5">
+                {awayTeam.tennisRank ? `#${awayTeam.tennisRank}` : 'Kwal.'} vs <span className="text-orange-400">{homeTeam.tennisRank ? `#${homeTeam.tennisRank}` : 'Kwal.'}</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5">
+                {sim.hasHardData ? 'Dane zweryfikowane' : 'Brak kursów w API'}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+              <div className="text-[9px] text-slate-400 uppercase">Bilans Bramek (Atak/Obrona)</div>
+              <div className="text-indigo-300 font-bold mt-0.5">
+                {awayTeam.avgPtsFor} vs <span className="text-orange-400">{homeTeam.avgPtsFor}</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5">
+                Stracone śr.: {awayTeam.avgPtsAgainst} / {homeTeam.avgPtsAgainst}
+              </div>
+            </div>
+          )}
 
           <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
             <div className="text-[9px] text-slate-400 uppercase">Composite Power Index</div>
@@ -935,8 +947,8 @@ export default function App() {
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
           <div className="flex flex-wrap justify-between gap-2">
-            <span>Lider {awayTeam.short}: <strong className="text-indigo-300">{awayTeam.leader}</strong></span>
-            <span>Lider {homeTeam.short}: <strong className="text-orange-300">{homeTeam.leader}</strong></span>
+            <span>Aktywny lider {awayTeam.short}: <strong className="text-indigo-300">{awayTeam.leader}</strong></span>
+            <span>Aktywny lider {homeTeam.short}: <strong className="text-orange-300">{homeTeam.leader}</strong></span>
           </div>
 
           {(hInj.length > 0 || aInj.length > 0) ? (
@@ -1115,10 +1127,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v6.5
+                  QUANT<span className="text-orange-500">BET</span> LIVE v6.6
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Calibrated Telemetry & Injuries
+                  Verified Data & Star Injury AI
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
@@ -1243,10 +1255,10 @@ export default function App() {
                 <div>
                   <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-orange-400" />
-                    Kreator Kuponów AKO (Skalibrowane Prawdopodobieństwa Live)
+                    Kreator Kuponów AKO (Tylko Zweryfikowane Dane Meczowe)
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Zwalidowane średnie meczowe (Pkt/Gole na mecz), Siła Pitagorejska, Four Factors i raporty kontuzji.
+                    Odrzuca mecze kwalifikacyjne bez bilansu/rankingu i rozpoznaje kontuzjowane gwiazdy (np. A. Edwards).
                   </p>
                 </div>
 
@@ -1421,6 +1433,11 @@ export default function App() {
                             {injCount > 0 && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                                 🚑 Kontuzje ({injCount})
+                              </span>
+                            )}
+                            {!pick.hasHardData && (
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                Brak bilansu w API (Wpisz kurs z STS)
                               </span>
                             )}
                             <span className="text-[11px] text-slate-400 font-mono">
