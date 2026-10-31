@@ -17,13 +17,28 @@ const SPORT_GROUPS = [
   { id: 'VOLLEYBALL', name: 'Siatkówka', icon: '🏐' }
 ];
 
+const MARKET_SCOPES = [
+  { id: 'ML', label: '🏆 Zwycięzcy / DNB' },
+  { id: 'TOTAL', label: '📊 Drabinka Over/Under' },
+  { id: 'HANDICAP', label: '⚖️ Drabinka Handicapów' },
+  { id: 'SPECIALS', label: '🎯 1X/X2, BTTS, Sety, Różnica' },
+  { id: 'ALL', label: '🔥 Wszystkie Rynki (Mix)' }
+];
+
+// Zakresy prawdopodobieństwa przy doborze linii z drabinki (np. bezpieczne linie vs wysokie kursy)
+const LINE_RISK_PROFILES = [
+  { id: 'SAFE_LADDER', label: 'Bezpieczne linie (60%-78%)', minProb: 60, maxProb: 80 },
+  { id: 'MAIN_LADDER', label: 'Linie główne (50%-62%)', minProb: 50, maxProb: 63 },
+  { id: 'FULL_LADDER', label: 'Pełny zakres (48%-82%)', minProb: 48, maxProb: 83 }
+];
+
 const LIVE_LEAGUE_ENDPOINTS = [
   { sport: 'BASKETBALL', country: 'USA (NBA)', name: 'NBA', path: 'basketball/nba', avgScore: 114.5, std: 12.5, deepScan: true },
   { sport: 'BASKETBALL', country: 'USA (NCAA)', name: 'NCAA Basket', path: 'basketball/mens-college-basketball', avgScore: 74.5, std: 11.0, deepScan: false },
   { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', path: 'hockey/nhl', avgScore: 3.1, std: 1.6, deepScan: true },
-  { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', path: 'hockey/mens-college-hockey', avgScore: 3.0, std: 1.6, deepScan: false },
-  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.0, std: 3.5, deepScan: false },
-  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.0, std: 3.5, deepScan: false },
+  { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', path: 'hockey/mens-college-hockey', avgScore: 2.9, std: 1.6, deepScan: false },
+  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.0, std: 3.6, deepScan: false },
+  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.0, std: 3.6, deepScan: false },
   { sport: 'VOLLEYBALL', country: 'Międzynarodowe / Liga', name: 'Siatkówka Liga', path: 'volleyball/mens-college-volleyball', avgScore: 181.5, std: 14.0, deepScan: false },
   { sport: 'SOCCER', country: 'Europa (LM)', name: 'Liga Mistrzów', path: 'soccer/uefa.champions', avgScore: 1.48, deepScan: true },
   { sport: 'SOCCER', country: 'Europa (LE)', name: 'Liga Europy', path: 'soccer/uefa.europa', avgScore: 1.42, deepScan: false },
@@ -43,12 +58,12 @@ const LIVE_LEAGUE_ENDPOINTS = [
   { sport: 'SOCCER', country: 'Arabia Saudyjska', name: 'Saudi Pro League', path: 'soccer/sau.1', avgScore: 1.58, deepScan: false }
 ];
 
-// Lista najważniejszych gwiazd NBA/NHL (aby skaner kontuzji nigdy nie traktował ich jako zwykłej rotacji, gdy wypadną z pola "leaders")
 const SUPERSTAR_LASTNAMES = new Set([
   'edwards', 'jokic', 'jokić', 'tatum', 'doncic', 'dončić', 'antetokounmpo', 'gilgeous-alexander',
   'embiid', 'brunson', 'durant', 'booker', 'curry', 'james', 'davis', 'mitchell', 'haliburton',
   'wembanyama', 'morant', 'sabonis', 'fox', 'banchero', 'cunningham', 'young', 'irving', 'lillard',
-  'mcdavid', 'mackinnon', 'matthews', 'kucherov', 'draisaitl', 'makar', 'panarin', 'barkov', 'kaprizov', 'hughes'
+  'markkanen', 'avdija', 'simons', 'sharpe', 'sengun', 'mcdavid', 'mackinnon', 'matthews', 'kucherov',
+  'draisaitl', 'makar', 'panarin', 'barkov', 'kaprizov', 'hughes'
 ]);
 
 // ============================================================================
@@ -78,6 +93,11 @@ function clamp(val, min, max) {
   return Math.min(max, Math.max(min, val));
 }
 
+function probToFairBookieOdd(probPct, margin = 1.055) {
+  const p = clamp(probPct, 6, 92) / 100;
+  return Number(Math.max(1.10, (1 / p) / margin).toFixed(2));
+}
+
 function parseRecordString(recStr) {
   if (!recStr) return { wins: 0, losses: 0, ties: 0, games: 0, pct: null };
   const parts = recStr.split('-').map((n) => parseInt(n, 10));
@@ -92,7 +112,7 @@ function parseRecordString(recStr) {
 }
 
 // ============================================================================
-// PARSER TELEMETRII ZESPOŁU / ZAWODNIKA (Z obsługą Rankingu ATP/WTA i bez hashStrength!)
+// PARSER TELEMETRII
 // ============================================================================
 function parseCompetitorStats(comp, cfg, isHome = true) {
   const name = comp.team?.displayName || comp.team?.name || comp.athlete?.displayName || 'Zespół';
@@ -106,24 +126,18 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   const parsedTotal = parseRecordString(totalRecObj?.summary);
   const parsedSplit = isHome ? parseRecordString(homeRecObj?.summary) : parseRecordString(awayRecObj?.summary);
 
-  // Sprawdzanie rankingu ATP/WTA lub rozstawienia turniejowego (seed)
-  const rawRank = comp.curatedRank?.current || comp.rank || comp.seed || comp.athlete?.rank || null;
-  const tennisRank = rawRank && rawRank > 0 && rawRank < 1500 ? Number(rawRank) : null;
-
-  // Czy mamy zweryfikowane dane o sile (prawdziwy bilans meczów lub ranking)?
+  const officialRank = comp.curatedRank?.current || comp.athlete?.Rank || null;
+  const tennisRank = officialRank && officialRank > 0 && officialRank < 1000 ? Number(officialRank) : null;
   const hasVerifiedData = parsedTotal.games > 0 || tennisRank !== null;
 
   let rawWinPct = 0.50;
   if (parsedTotal.pct !== null) {
     rawWinPct = parsedTotal.pct;
   } else if (tennisRank !== null) {
-    // Przeliczenie miejsca w rankingu WTA/ATP na siłę bazową (np. #10 -> 0.72, #100 -> 0.55, #500 -> 0.35)
-    rawWinPct = clamp(0.82 - Math.log10(Math.max(1, tennisRank)) * 0.16, 0.25, 0.80);
+    rawWinPct = clamp(0.80 - Math.log10(Math.max(1, tennisRank)) * 0.15, 0.28, 0.78);
   }
 
   const gamesPlayed = parsedTotal.games;
-
-  // Silna stabilizacja Bayesowska na początku sezonu (k=26 dla NBA, aby bilans 5-0 vs 0-5 nie dawał 80% szans!)
   const kPrior = cfg.sport === 'BASKETBALL' ? 26 : cfg.sport === 'HOCKEY' ? 18 : 12;
   const bayesianWinPct = gamesPlayed > 0
     ? (rawWinPct * gamesPlayed + 0.50 * kPrior) / (gamesPlayed + kPrior)
@@ -150,8 +164,8 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   } else if (cfg.sport === 'HOCKEY') {
     const rawGpg = statsMap.avggoals || (statsMap.goals && gamesPlayed > 0 ? statsMap.goals / gamesPlayed : null);
     if (rawGpg && rawGpg > 1.6 && rawGpg < 4.6) avgPtsFor = rawGpg;
-    avgPtsFor = clamp(avgPtsFor, 2.30, 3.85);
-    avgPtsAgainst = clamp(avgPtsAgainst, 2.30, 3.85);
+    avgPtsFor = clamp(avgPtsFor, 2.25, 3.85);
+    avgPtsAgainst = clamp(avgPtsAgainst, 2.25, 3.85);
   } else if (cfg.sport === 'SOCCER') {
     const rawGpg = statsMap.avggoals || (statsMap.goalsfor && gamesPlayed > 0 ? statsMap.goalsfor / gamesPlayed : null);
     if (rawGpg && rawGpg > 0.5 && rawGpg < 3.2) avgPtsFor = rawGpg;
@@ -170,7 +184,6 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   const turnovers = Number(clamp(statsMap.avgTurnovers || statsMap.turnovers || (13.5 - (bayesianWinPct - 0.5) * 2), 10.5, 17.0).toFixed(1));
 
   const fourFactorsIndex = (efgPct - 52.0) * 0.30 + (rebounds - 43.0) * 0.12 - (turnovers - 13.5) * 0.20;
-
   const compositePower = clamp(
     bayesianWinPct * 0.55 + pythagoreanWinPct * 0.30 + (0.50 + splitFactor) * 0.15,
     0.34,
@@ -184,7 +197,7 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   return {
     name,
     short,
-    record: totalRecObj?.summary || (tennisRank ? `Rank #${tennisRank}` : 'Brak bilansu'),
+    record: totalRecObj?.summary || (tennisRank ? `WTA/ATP #${tennisRank}` : 'Brak bilansu'),
     splitRecord: isHome
       ? (homeRecObj?.summary ? `Dom: ${homeRecObj.summary}` : `Siła: ${Math.round(compositePower * 100)}%`)
       : (awayRecObj?.summary ? `Wyjazd: ${awayRecObj.summary}` : `Siła: ${Math.round(compositePower * 100)}%`),
@@ -205,9 +218,6 @@ function parseCompetitorStats(comp, cfg, isHome = true) {
   };
 }
 
-// ============================================================================
-// SKANER KONTUZJI (Rozpoznaje gwiazdy takie jak Anthony Edwards nawet gdy są OUT!)
-// ============================================================================
 function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
   if (!Array.isArray(injuriesArr) || injuriesArr.length === 0) {
     return { list: [], penalty: 0 };
@@ -224,7 +234,6 @@ function evaluateLiveInjuries(injuriesArr, teamStats, sport) {
     const statusRaw = (item.status || item.type?.description || 'Out').toUpperCase();
     const pos = item.athlete?.position?.abbreviation || '';
 
-    // Naprawa błędu z filmu: Sprawdzamy zarówno aktywnego lidera, jak i globalną bazę gwiazd NBA/NHL!
     const isStar = SUPERSTAR_LASTNAMES.has(last) || (teamStats.leaderLastName && last.length > 2 && teamStats.leaderLastName === last);
     const basePts = isStar ? 2.6 : 0.55;
     const roleTag = isStar ? 'GWIAZDA / LIDER' : (pos ? `Rotacja (${pos})` : 'Rotacja');
@@ -277,8 +286,8 @@ function extractRealBookieOdds(comp, homeAbbr) {
   const mlAwayRaw = oddsObj.awayTeamOdds?.moneyLine ?? oddsObj.moneyline?.away?.close?.odds;
   const mlDrawRaw = oddsObj.drawOdds?.moneyLine;
 
-  let realHomeOdd = americanToDecimal(mlHomeRaw);
-  let realAwayOdd = americanToDecimal(mlAwayRaw);
+  const realHomeOdd = americanToDecimal(mlHomeRaw);
+  const realAwayOdd = americanToDecimal(mlAwayRaw);
   const realDrawOdd = americanToDecimal(mlDrawRaw);
 
   let realSpreadHome = null;
@@ -298,7 +307,7 @@ function extractRealBookieOdds(comp, homeAbbr) {
 }
 
 // ============================================================================
-// SKALIBROWANY SILNIK SYMULACYJNY
+// SILNIK SYMULACYJNY GENERUJĄCY PEŁNE DRABINKI OVER/UNDER, HANDICAPÓW I 1X2
 // ============================================================================
 function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const { homeTeam, awayTeam, sport, cfg, liveInjuries, realOddsInfo } = match;
@@ -306,14 +315,14 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const aPen = (liveInjuries?.awayPenalty || 0) + (customMod.aInj || 0);
   const netInjDiff = aPen - hPen;
 
-  // Sprawdzenie, czy mecz ma twarde pokrycie w danych (bilans, ranking lub kursy z API)
   const hasHardData =
-    homeTeam.hasVerifiedData ||
-    awayTeam.hasVerifiedData ||
+    (homeTeam.hasVerifiedData && awayTeam.hasVerifiedData) ||
     Boolean(realOddsInfo?.realHomeOdd) ||
     Boolean(realOddsInfo?.realSpreadHome);
 
-  // 1. PIŁKA NOŻNA ORAZ HOKEJ
+  // --------------------------------------------------------------------------
+  // 1. PIŁKA NOŻNA ORAZ HOKEJ (Rozkład Poissona + Pełna Drabinka Goli + 1X/X2 + DNB + BTTS)
+  // --------------------------------------------------------------------------
   if (sport === 'SOCCER' || sport === 'HOCKEY') {
     const hAdv = sport === 'HOCKEY' ? 0.16 : 0.20;
     const statDiff = (homeTeam.compositePower - awayTeam.compositePower) * (sport === 'HOCKEY' ? 2.1 : 1.6) + hAdv + netInjDiff;
@@ -326,14 +335,16 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       finalDiff = mktDiff * 0.65 + statDiff * 0.35;
     }
 
-    const minG = sport === 'HOCKEY' ? 2.05 : 0.65;
+    const minG = sport === 'HOCKEY' ? 1.95 : 0.60;
     const maxG = sport === 'HOCKEY' ? 3.95 : 2.55;
     const lambdaH = clamp(baseTotal / 2 + finalDiff / 2, minG, maxG);
     const lambdaA = clamp(baseTotal / 2 - finalDiff / 2, minG, maxG);
 
-    let pH = 0, pD = 0, pA = 0, pOver = 0;
-    const maxLoop = sport === 'HOCKEY' ? 10 : 8;
-    const lineOU = realOddsInfo?.totalLine || (sport === 'HOCKEY' ? 5.5 : 2.5);
+    // Macierz Poissona dla dokładnego wyliczenia całej drabinki linii goli (jak na screenach STS!)
+    const maxLoop = sport === 'HOCKEY' ? 12 : 9;
+    let pH = 0, pD = 0, pA = 0, bttsYes = 0;
+    const totalGoalsDist = new Array(maxLoop * 2 + 1).fill(0);
+    const marginDist = {};
 
     for (let h = 0; h <= maxLoop; h++) {
       for (let a = 0; a <= maxLoop; a++) {
@@ -341,17 +352,62 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
         if (h > a) pH += p;
         else if (h === a) pD += p;
         else pA += p;
-        if (h + a > lineOU) pOver += p;
+        if (h >= 1 && a >= 1) bttsYes += p;
+        totalGoalsDist[h + a] += p;
+        const diff = h - a;
+        marginDist[diff] = (marginDist[diff] || 0) + p;
       }
     }
 
     const tot = pH + pD + pA || 1;
-    const regHome = clamp((pH / tot) * 100, 18, 65);
-    const regDraw = clamp((pD / tot) * 100, 18, 30);
-    const regAway = clamp(100 - regHome - regDraw, 18, 65);
+    const regHome = clamp((pH / tot) * 100, 16, 66);
+    const regDraw = clamp((pD / tot) * 100, 17, 31);
+    const regAway = clamp(100 - regHome - regDraw, 16, 66);
 
-    const mlHome = clamp(((pH + pD * 0.52) / tot) * 100, 28, 72);
+    // Zakład bez remisu (DNB) oraz Zwycięzca z dogrywką i karnymi (ML)
+    const dnbHome = clamp((regHome / (regHome + regAway)) * 100, 22, 78);
+    const dnbAway = 100 - dnbHome;
+    const mlHome = clamp(((pH + pD * 0.52) / tot) * 100, 24, 76);
     const mlAway = 100 - mlHome;
+
+    // Podwójna szansa (1X, X2, 12 - ze screenów piłki i hokeja w STS!)
+    const dc1X = clamp(regHome + regDraw, 35, 86);
+    const dcX2 = clamp(regAway + regDraw, 35, 86);
+    const dc12 = clamp(regHome + regAway, 68, 84);
+
+    // DRABINKA LICZBY GOLI:
+    // Piłka nożna: 1.5, 2.5, 3.5, 4.5 | Hokej: 3.5, 4.5, 5.5, 6.5, 7.5 (dokładnie jak na screenach z STS!)
+    const ladderLines = sport === 'HOCKEY' ? [3.5, 4.5, 5.5, 6.5, 7.5] : [1.5, 2.5, 3.5, 4.5];
+    const totalsLadder = ladderLines.map((line) => {
+      let overP = 0;
+      for (let g = 0; g < totalGoalsDist.length; g++) {
+        if (g > line) overP += totalGoalsDist[g];
+      }
+      const overProb = clamp((overP / tot) * 100, 12, 88);
+      return {
+        line,
+        overProb,
+        underProb: 100 - overProb
+      };
+    });
+
+    // DRABINKA HANDICAPÓW BRAMKOWYCH (-1.5 / +1.5 oraz -2.5 / +2.5)
+    const hcpLines = [-1.5, 1.5];
+    const handicapLadder = hcpLines.map((hLine) => {
+      let covHome = 0;
+      Object.entries(marginDist).forEach(([diffStr, probVal]) => {
+        if (Number(diffStr) + hLine > 0) covHome += probVal;
+      });
+      const homeCoverProb = clamp((covHome / tot) * 100, 15, 85);
+      return {
+        lineHome: hLine,
+        homeCoverProb,
+        awayCoverProb: 100 - homeCoverProb
+      };
+    });
+
+    const centerLine = realOddsInfo?.totalLine || (sport === 'HOCKEY' ? 5.5 : 2.5);
+    const mainTotalObj = totalsLadder.find((t) => t.line === centerLine) || totalsLadder[1];
     const useMoneylineProbs = sport === 'HOCKEY' && !realOddsInfo?.realDrawOdd;
 
     return {
@@ -361,18 +417,30 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       regHomeProb: regHome,
       regDrawProb: regDraw,
       regAwayProb: regAway,
+      mlHomeProb: mlHome,
+      mlAwayProb: mlAway,
+      dnbHomeProb: dnbHome,
+      dnbAwayProb: dnbAway,
+      dc1XProb: dc1X,
+      dcX2Prob: dcX2,
+      dc12Prob: dc12,
+      bttsYesProb: clamp((bttsYes / tot) * 100, 28, 74),
       expHome: lambdaH,
       expAway: lambdaA,
       expTotal: lambdaH + lambdaA,
-      overProb: clamp(pOver * 100, 36, 62),
-      totalLine: lineOU,
+      overProb: mainTotalObj.overProb,
+      totalLine: mainTotalObj.line,
+      totalsLadder,
+      handicapLadder,
       netInjDiff,
       hasHardData,
-      modelTag: sport === 'SOCCER' ? 'Poisson xG (90m 1X2)' : 'NHL Poisson xG (Moneyline z OT)'
+      modelTag: sport === 'SOCCER' ? 'Poisson xG (Drabinka 1.5–4.5)' : 'Hokej Poisson xG (Drabinka 3.5–7.5)'
     };
   }
 
-  // 2. TENIS & SIATKÓWKA (Naprawiona linia gemów zależna od faworyta!)
+  // --------------------------------------------------------------------------
+  // 2. TENIS & SIATKÓWKA (Drabinka Gemów 18.5–25.5, Handicapy Gemowe/Setowe, Liczba Setów 2.5)
+  // --------------------------------------------------------------------------
   if (sport === 'TENNIS' || sport === 'VOLLEYBALL') {
     const eloH = 1850 + homeTeam.compositePower * 360 - hPen * 25;
     const eloA = 1850 + awayTeam.compositePower * 360 - aPen * 25;
@@ -383,33 +451,66 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       pH = mktP * 0.70 + pH * 0.30;
     }
 
-    pH = clamp(pH, 15, 85);
-    // Im większa przewaga faworyta, tym krótszy mecz i niższa linia gemów (np. 16.5 - 18.5 zamiast sztywnego 21.5!)
+    pH = clamp(pH, 16, 84);
     const closeness = 1 - Math.abs(pH - 50) / 50;
-    const dynamicTennisLine = closeness < 0.45 ? 17.5 : closeness < 0.70 ? 19.5 : 21.5;
-    const lineOU = realOddsInfo?.totalLine || (sport === 'VOLLEYBALL' ? 180.5 : dynamicTennisLine);
-    const expTotal = sport === 'VOLLEYBALL' ? 175 + closeness * 12 : 16.5 + closeness * 5.8;
+    const expTotal = sport === 'VOLLEYBALL' ? 176 + closeness * 12 : 18.2 + closeness * 4.8;
+    const stdTotal = sport === 'VOLLEYBALL' ? 13.5 : 3.6;
 
-    // Jeżeli nie mamy twardych danych (np. kwalifikacje WTA bez rankingu i kursów w API), nie pompujemy Overa do 66%!
-    const rawOverProb = (1 - normalCDF(lineOU, expTotal, sport === 'VOLLEYBALL' ? 13.5 : 3.6)) * 100;
-    const overProb = hasHardData ? clamp(rawOverProb, 38, 61) : 50.0;
+    // DRABINKA GEMÓW (jak na screenie Carreno-Busta vs Bellucci: od 18.5 do 25.5 co 1 gem!)
+    const baseCenter = Math.round(expTotal) + 0.5;
+    const ladderLines = sport === 'TENNIS'
+      ? [baseCenter - 3, baseCenter - 2, baseCenter - 1, baseCenter, baseCenter + 1, baseCenter + 2, baseCenter + 3]
+      : [175.5, 180.5, 185.5];
+
+    const totalsLadder = ladderLines.map((line) => {
+      const rawOv = (1 - normalCDF(line, expTotal, stdTotal)) * 100;
+      const overProb = hasHardData ? clamp(rawOv, 18, 82) : 50.0;
+      return { line, overProb, underProb: 100 - overProb };
+    });
+
+    // DRABINKA HANDICAPÓW GEMOWYCH (od -4.5/+4.5 do -1.5/+1.5 jak w STS!)
+    const expGameMarginHome = ((pH - 50) / 50) * 5.8;
+    const hcpLines = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5];
+    const handicapLadder = hcpLines.map((hLine) => {
+      const covH = clamp((1 - normalCDF(-hLine, expGameMarginHome, 3.8)) * 100, 16, 84);
+      return { lineHome: hLine, homeCoverProb: covH, awayCoverProb: 100 - covH };
+    });
+
+    // Sety - Handicap (-1.5 / +1.5 seta) oraz Liczba setów (-2.5 / +2.5) ze screenów STS!
+    const p1prob = pH / 100;
+    const p2prob = 1 - p1prob;
+    // Prawdopodobieństwo wyniku 2:0, 2:1, 1:2, 0:2
+    const prob2_0 = clamp(p1prob * p1prob * 108, 12, 72);
+    const prob0_2 = clamp(p2prob * p2prob * 108, 12, 72);
+    const setsUnder25Prob = clamp(prob2_0 + prob0_2, 42, 74); // Mecz zakończy się w 2 setach (-2.5 seta)
+    const setsOver25Prob = 100 - setsUnder25Prob; // 3 sety w meczu (+2.5 seta)
+
+    const mainTotalObj = totalsLadder[3] || totalsLadder[0];
 
     return {
       homeWinProb: pH,
       drawProb: 0,
       awayWinProb: 100 - pH,
-      expHome: pH >= 50 ? 2.0 : 0.8,
-      expAway: pH >= 50 ? 0.8 : 2.0,
+      expHome: pH >= 50 ? 2.0 : 0.9,
+      expAway: pH >= 50 ? 0.9 : 2.0,
       expTotal,
-      overProb,
-      totalLine: lineOU,
+      overProb: mainTotalObj.overProb,
+      totalLine: mainTotalObj.line,
+      totalsLadder,
+      handicapLadder,
+      prob2_0,
+      prob0_2,
+      setsUnder25Prob,
+      setsOver25Prob,
       netInjDiff,
       hasHardData,
-      modelTag: sport === 'TENNIS' ? 'ATP/WTA Rank ELO' : 'Volley Set-Point Gauss'
+      modelTag: sport === 'TENNIS' ? 'ATP/WTA Rank ELO (Drabinka Gemów & Setów)' : 'Volley Set-Point Gauss'
     };
   }
 
-  // 3. KOSZYKÓWKA (NBA / NCAA) - Mocne kotwiczenie na starcie sezonu (brak kursów 1.16 na wyrównane mecze!)
+  // --------------------------------------------------------------------------
+  // 3. KOSZYKÓWKA (Pełna Drabinka Sumy Punktów, Drabinka Handicapów i Różnica Zwycięstwa)
+  // --------------------------------------------------------------------------
   const basePts = cfg.avgScore || 114.0;
   const stdGame = cfg.std || 12.5;
 
@@ -428,8 +529,7 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
     expectedMarginHome = mktMargin * 0.70 + expectedMarginHome * 0.30;
   }
 
-  // Ograniczenie maksymalnego spreadu bez kursów do +/- 7.5 pkt (co odpowiada max ~72% szansy i kursowi ~1.35)
-  const maxAllowedMargin = (realOddsInfo?.realHomeOdd || realOddsInfo?.realSpreadHome) ? 12.5 : 7.2;
+  const maxAllowedMargin = (realOddsInfo?.realHomeOdd || realOddsInfo?.realSpreadHome) ? 12.5 : 7.0;
   expectedMarginHome = clamp(expectedMarginHome, -maxAllowedMargin, maxAllowedMargin);
 
   const statTotal = homeTeam.avgPtsFor + awayTeam.avgPtsFor;
@@ -439,32 +539,65 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
   const expAway = totalTarget / 2 - expectedMarginHome / 2;
   const expTotal = expHome + expAway;
 
-  const homeWinProb = clamp((1 - normalCDF(0, expectedMarginHome, stdGame)) * 100, 24, 76);
-  const lineOU = realOddsInfo?.totalLine || Math.round(expTotal * 2) / 2;
-  const overProb = clamp((1 - normalCDF(lineOU, expTotal, stdGame * 1.4)) * 100, 38, 62);
+  const homeWinProb = clamp((1 - normalCDF(0, expectedMarginHome, stdGame)) * 100, 22, 78);
+  const centerLine = realOddsInfo?.totalLine || Math.round(expTotal) + 0.5;
+
+  // DRABINKA PUNKTÓW KOSZYKÓWKI (5 linii co 3 punkty wokół linii głównej - jak na screenie Utah vs Portland!)
+  const ladderOffsets = [-6, -3, 0, 3, 6];
+  const totalsLadder = ladderOffsets.map((off) => {
+    const line = Number((centerLine + off).toFixed(1));
+    const overProb = clamp((1 - normalCDF(line, expTotal, stdGame * 1.4)) * 100, 18, 82);
+    return { line, overProb, underProb: 100 - overProb };
+  });
+
+  // DRABINKA HANDICAPÓW KOSZYKÓWKI (np. -6.5, -4.5, -2.5, +2.5, +4.5, +6.5 jak w STS!)
+  const centerSpread = Math.round(-expectedMarginHome) - 0.5;
+  const spreadOffsets = [-3, -1, 1, 3];
+  const handicapLadder = spreadOffsets.map((off) => {
+    const lineHome = Number((centerSpread + off).toFixed(1)) || -2.5;
+    const homeCoverProb = clamp((1 - normalCDF(-lineHome, expectedMarginHome, stdGame)) * 100, 18, 82);
+    return { lineHome, homeCoverProb, awayCoverProb: 100 - homeCoverProb };
+  });
+
+  const favIsHome = expectedMarginHome >= 0;
+  const favMarginMean = Math.abs(expectedMarginHome);
+  const winBy1to7Prob = clamp((normalCDF(7.5, favMarginMean, stdGame) - normalCDF(0, favMarginMean, stdGame)) * 100, 18, 38);
+  const winBy8to14Prob = clamp((normalCDF(14.5, favMarginMean, stdGame) - normalCDF(7.5, favMarginMean, stdGame)) * 100, 14, 34);
+
+  const regDrawProb = clamp(6.5 - Math.abs(expectedMarginHome) * 0.25, 4.0, 7.5);
+  const regHomeProb = clamp(homeWinProb - regDrawProb * 0.5, 20, 74);
+  const regAwayProb = clamp(100 - homeWinProb - regDrawProb * 0.5, 20, 74);
 
   return {
     homeWinProb,
     drawProb: 0,
     awayWinProb: 100 - homeWinProb,
+    regHomeProb,
+    regDrawProb,
+    regAwayProb,
     expHome,
     expAway,
     expTotal,
-    overProb,
-    totalLine: lineOU,
+    overProb: totalsLadder[2].overProb,
+    totalLine: centerLine,
+    totalsLadder,
+    handicapLadder,
+    favIsHome,
+    winBy1to7Prob,
+    winBy8to14Prob,
     netInjDiff,
     hasHardData,
-    modelTag: 'Four Factors + Pythagorean + Live Injuries'
+    modelTag: 'Four Factors + Pełna Drabinka Pkt & Handicapów'
   };
 }
 
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v6.6)
+// GŁÓWNY KOMPONENT APLIKACJI (v6.8 FULL LADDER STS ENGINE)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncInfo, setSyncInfo] = useState('Skanowanie telemetrii meczowej, rankingów i raportów kontuzji...');
+  const [syncInfo, setSyncInfo] = useState('Skanowanie drabinek kursowych, handicapów i raportów kontuzji...');
 
   const [mainTab, setMainTab] = useState('builder');
   const [mobileCouponModalOpen, setMobileCouponModalOpen] = useState(false);
@@ -474,12 +607,13 @@ export default function App() {
   const [activeCountry, setActiveCountry] = useState('ALL');
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [displayLimit, setDisplayLimit] = useState(50);
+  const [displayLimit, setDisplayLimit] = useState(60);
 
   const [includedSports, setIncludedSports] = useState(['SOCCER', 'BASKETBALL', 'HOCKEY', 'TENNIS', 'VOLLEYBALL']);
   const [targetMinOdds, setTargetMinOdds] = useState(2.0);
   const [builderStrategy, setBuilderStrategy] = useState('safe');
-  const [builderScope, setBuilderScope] = useState('ML_ONLY');
+  const [builderScope, setBuilderScope] = useState('ML');
+  const [lineRiskProfile, setLineRiskProfile] = useState('SAFE_LADDER'); // Dobór linii wg prawdopodobieństwa od-do!
   const [taxRate, setTaxRate] = useState(true);
   const [couponStake, setCouponStake] = useState(2);
   const [customOddsMap, setCustomOddsMap] = useState({});
@@ -578,7 +712,6 @@ export default function App() {
         })
       );
 
-      // KROK 2: POBIERANIE KONTUZJI ORAZ DODATKOWYCH KURSÓW Z PICKCENTER (summary?event=ID)
       const allCollected = Array.from(collectedMap.values());
       const matchesForDeepScan = allCollected.filter((m) => m.cfg.deepScan && (m.dayBucket === 'TODAY' || m.dayBucket === 'TOMORROW')).slice(0, 22);
 
@@ -590,7 +723,6 @@ export default function App() {
             if (!sumRes.ok) return;
             const sumData = await sumRes.json();
 
-            // Wyciągnięcie kursów z pickcenter, jeśli nie było ich na głównej tablicy scoreboard
             if (!m.realOddsInfo.realHomeOdd && Array.isArray(sumData.pickcenter) && sumData.pickcenter.length > 0) {
               const pc = sumData.pickcenter[0];
               const hOdd = americanToDecimal(pc.homeTeamOdds?.moneyLine);
@@ -636,9 +768,9 @@ export default function App() {
         const margin = 1.055;
         m.sim = sim;
         m.bookieOdds = {
-          home: m.realOddsInfo.realHomeOdd || Number(Math.max(1.22, (100 / sim.homeWinProb) / margin).toFixed(2)),
-          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? Number(Math.max(2.90, (100 / sim.drawProb) / margin).toFixed(2)) : null),
-          away: m.realOddsInfo.realAwayOdd || Number(Math.max(1.22, (100 / sim.awayWinProb) / margin).toFixed(2)),
+          home: m.realOddsInfo.realHomeOdd || probToFairBookieOdd(sim.homeWinProb, margin),
+          draw: m.realOddsInfo.realDrawOdd || (sim.drawProb > 0 ? probToFairBookieOdd(sim.drawProb, margin) : null),
+          away: m.realOddsInfo.realAwayOdd || probToFairBookieOdd(sim.awayWinProb, margin),
           totalLine: sim.totalLine,
           overOdds: 1.88,
           underOdds: 1.88
@@ -668,74 +800,230 @@ export default function App() {
     return ['ALL', ...Array.from(new Set(sub.map((m) => m.country)))];
   }, [matches, activeSport]);
 
+  // ==========================================================================
+  // GENEROWANIE PEŁNYCH DRABINEK BUKMACHERSKICH DLA WSZYSTKICH SPORTÓW (JAK W STS!)
+  // ==========================================================================
   const allPicks = useMemo(() => {
     const taxMult = taxRate ? 0.88 : 1.0;
     const list = [];
 
+    const addPick = (id, m, sportIcon, marketType, marketBadge, selectionName, defaultOdd, prob, projStr, hasHardData = true) => {
+      const odd = customOddsMap[id] ?? defaultOdd;
+      const ev = ((prob / 100) * (odd * taxMult) - 1) * 100;
+      list.push({
+        id,
+        match: m,
+        sport: m.sport,
+        sportIcon,
+        marketType,
+        marketBadge,
+        selectionName,
+        odds: odd,
+        prob,
+        ev,
+        projStr,
+        hasHardData,
+        score: prob * 0.76 + clamp(ev, -15, 25) * 1.1
+      });
+    };
+
     matches.forEach((m) => {
       const { sim, homeTeam, awayTeam, bookieOdds } = m;
       const sportIcon = SPORT_GROUPS.find((s) => s.id === m.sport)?.icon || '🏆';
-      const scoreUnit = m.sport === 'SOCCER' ? 'goli (xG)' : m.sport === 'HOCKEY' ? 'bramek' : m.sport === 'TENNIS' ? 'sety' : 'pkt';
-      const projStr = `${awayTeam.short} ${sim.expAway.toFixed(1)} : ${sim.expHome.toFixed(1)} ${homeTeam.short} (${scoreUnit})`;
-      const marketSuffix = m.sport === 'HOCKEY' ? ' (z OT)' : m.sport === 'SOCCER' ? ' (90m 1X2)' : '';
+      const unitLabel = m.sport === 'SOCCER' ? 'gole' : m.sport === 'HOCKEY' ? 'gole' : m.sport === 'TENNIS' ? 'gemy' : 'pkt';
+      const projStr = `${awayTeam.short} ${sim.expAway.toFixed(1)} : ${sim.expHome.toFixed(1)} ${homeTeam.short} (Σ ${sim.expTotal.toFixed(1)} ${unitLabel})`;
+      const mlSuffix = m.sport === 'HOCKEY' ? ' (z dogr./karn.)' : m.sport === 'SOCCER' ? ' (90m 1X2)' : m.sport === 'BASKETBALL' ? ' (z dogr.)' : '';
 
-      const idH = `${m.id}_HOME`;
-      const oddH = customOddsMap[idH] ?? bookieOdds.home;
-      const evH = ((sim.homeWinProb / 100) * (oddH * taxMult) - 1) * 100;
-      list.push({
-        id: idH,
-        match: m,
-        sport: m.sport,
-        sportIcon,
-        marketType: 'ML',
-        selectionName: `${homeTeam.name} wygra (1)${marketSuffix}`,
-        odds: oddH,
-        prob: sim.homeWinProb,
-        ev: evH,
-        projStr,
-        hasHardData: sim.hasHardData,
-        score: sim.homeWinProb * 0.78 + clamp(evH, -15, 25) * 1.1
-      });
+      // 1. ZWYCIĘZCA MECZU (1 oraz 2)
+      addPick(`${m.id}_ML_1`, m, sportIcon, 'ML', 'Zwycięzca', `${homeTeam.name} wygra (1)${mlSuffix}`, bookieOdds.home, sim.homeWinProb, projStr, sim.hasHardData);
+      addPick(`${m.id}_ML_2`, m, sportIcon, 'ML', 'Zwycięzca', `${awayTeam.name} wygra (2)${mlSuffix}`, bookieOdds.away, sim.awayWinProb, projStr, sim.hasHardData);
 
-      const idA = `${m.id}_AWAY`;
-      const oddA = customOddsMap[idA] ?? bookieOdds.away;
-      const evA = ((sim.awayWinProb / 100) * (oddA * taxMult) - 1) * 100;
-      list.push({
-        id: idA,
-        match: m,
-        sport: m.sport,
-        sportIcon,
-        marketType: 'ML',
-        selectionName: `${awayTeam.name} wygra (2)${marketSuffix}`,
-        odds: oddA,
-        prob: sim.awayWinProb,
-        ev: evA,
-        projStr,
-        hasHardData: sim.hasHardData,
-        score: sim.awayWinProb * 0.78 + clamp(evA, -15, 25) * 1.1
-      });
+      if (!sim.hasHardData) return;
 
-      // Rynek Over/Under dodajemy tylko wtedy, gdy mecz ma zweryfikowane dane (blokada ślepych Overów 21.5 w kwalifikacjach WTA!)
-      if (sim.hasHardData) {
-        const idOU = `${m.id}_OU`;
-        const isOver = sim.overProb >= 50;
-        const probOU = isOver ? sim.overProb : 100 - sim.overProb;
-        const oddOU = customOddsMap[idOU] ?? (isOver ? bookieOdds.overOdds : bookieOdds.underOdds);
-        const evOU = ((probOU / 100) * (oddOU * taxMult) - 1) * 100;
-        list.push({
-          id: idOU,
-          match: m,
-          sport: m.sport,
+      // Zakład bez remisu (DNB) dla Piłki Nożnej i Hokeja (widoczny na screenach z hokeja!)
+      if ((m.sport === 'SOCCER' || m.sport === 'HOCKEY') && sim.dnbHomeProb) {
+        const favHome = sim.dnbHomeProb >= 50;
+        const dnbProb = favHome ? sim.dnbHomeProb : sim.dnbAwayProb;
+        const dnbTeam = favHome ? homeTeam.name : awayTeam.name;
+        addPick(
+          `${m.id}_DNB`,
+          m,
           sportIcon,
-          marketType: 'TOTAL',
-          selectionName: `${isOver ? 'Powyżej (Over)' : 'Poniżej (Under)'} ${sim.totalLine}`,
-          odds: oddOU,
-          prob: probOU,
-          ev: evOU,
-          projStr,
-          hasHardData: true,
-          score: probOU * 0.72 + clamp(evOU, -15, 25) * 1.1
-        });
+          'ML',
+          'Zakład bez remisu',
+          `Zakład bez remisu: ${dnbTeam} (${favHome ? '1' : '2'})`,
+          probToFairBookieOdd(dnbProb, 1.055),
+          dnbProb,
+          projStr
+        );
+      }
+
+      // 2. PEŁNA DRABINKA LICZBY GOLI / GEMÓW / PUNKTÓW (TOTALS LADDER)
+      (sim.totalsLadder || []).forEach((rung) => {
+        // Dodajemy Powyżej (+linia) oraz Poniżej (-linia) jeśli mieszczą się w sensownym przedziale 46% - 83%
+        if (rung.overProb >= 46 && rung.overProb <= 83) {
+          addPick(
+            `${m.id}_OVER_${rung.line}`,
+            m,
+            sportIcon,
+            'TOTAL',
+            `Linia +${rung.line}`,
+            `Liczba ${unitLabel}: +${rung.line} (Powyżej)`,
+            probToFairBookieOdd(rung.overProb, 1.06),
+            rung.overProb,
+            projStr
+          );
+        }
+        if (rung.underProb >= 46 && rung.underProb <= 83) {
+          addPick(
+            `${m.id}_UNDER_${rung.line}`,
+            m,
+            sportIcon,
+            'TOTAL',
+            `Linia -${rung.line}`,
+            `Liczba ${unitLabel}: -${rung.line} (Poniżej)`,
+            probToFairBookieOdd(rung.underProb, 1.06),
+            rung.underProb,
+            projStr
+          );
+        }
+      });
+
+      // 3. PEŁNA DRABINKA HANDICAPÓW (HANDICAP LADDER - Pkt / Gemy / Bramki)
+      (sim.handicapLadder || []).forEach((hRung) => {
+        const signH = hRung.lineHome > 0 ? `+${hRung.lineHome}` : `${hRung.lineHome}`;
+        const awayLine = -hRung.lineHome;
+        const signA = awayLine > 0 ? `+${awayLine}` : `${awayLine}`;
+        const hcpTypeLabel = m.sport === 'TENNIS' ? 'Gemy - handicap' : 'Handicap';
+
+        if (hRung.homeCoverProb >= 48 && hRung.homeCoverProb <= 82) {
+          addPick(
+            `${m.id}_HCP_H_${hRung.lineHome}`,
+            m,
+            sportIcon,
+            'HANDICAP',
+            hcpTypeLabel,
+            `${hcpTypeLabel}: ${homeTeam.name} (${signH})`,
+            probToFairBookieOdd(hRung.homeCoverProb, 1.06),
+            hRung.homeCoverProb,
+            projStr
+          );
+        }
+        if (hRung.awayCoverProb >= 48 && hRung.awayCoverProb <= 82) {
+          addPick(
+            `${m.id}_HCP_A_${awayLine}`,
+            m,
+            sportIcon,
+            'HANDICAP',
+            hcpTypeLabel,
+            `${hcpTypeLabel}: ${awayTeam.name} (${signA})`,
+            probToFairBookieOdd(hRung.awayCoverProb, 1.06),
+            hRung.awayCoverProb,
+            projStr
+          );
+        }
+      });
+
+      // 4. RYNKI SPECJALNE Z TWOICH SCREENÓW STS (Podwójna szansa 1X/X2, BTTS, Sety w tenisie, Różnica zwycięstwa w NBA)
+      if (m.sport === 'SOCCER' || m.sport === 'HOCKEY') {
+        // Podwójna szansa (1X lub X2)
+        const pick1X = sim.dc1XProb >= sim.dcX2Prob;
+        const dcProb = pick1X ? sim.dc1XProb : sim.dcX2Prob;
+        const dcLabel = pick1X ? `1X (${homeTeam.short} lub remis)` : `X2 (${awayTeam.short} lub remis)`;
+        addPick(
+          `${m.id}_DC`,
+          m,
+          sportIcon,
+          'SPECIALS',
+          'Podwójna szansa',
+          `Podwójna szansa: ${dcLabel}`,
+          probToFairBookieOdd(dcProb, 1.065),
+          dcProb,
+          projStr
+        );
+
+        // Obie drużyny strzelą gola (BTTS Tak/Nie)
+        const bttsYes = sim.bttsYesProb >= 50;
+        const bttsProb = bttsYes ? sim.bttsYesProb : 100 - sim.bttsYesProb;
+        addPick(
+          `${m.id}_BTTS`,
+          m,
+          sportIcon,
+          'SPECIALS',
+          'Obie strzelą (BTTS)',
+          `Obie drużyny strzelą gola: ${bttsYes ? 'TAK' : 'NIE'}`,
+          probToFairBookieOdd(bttsProb, 1.065),
+          bttsProb,
+          projStr
+        );
+
+        // Czas regulaminowy 60m dla Hokeja (Mecz: 1 lub 2 bez dogrywki)
+        if (m.sport === 'HOCKEY') {
+          const favRegHome = sim.regHomeProb >= sim.regAwayProb;
+          const regP = favRegHome ? sim.regHomeProb : sim.regAwayProb;
+          const regT = favRegHome ? homeTeam.name : awayTeam.name;
+          addPick(
+            `${m.id}_REG60`,
+            m,
+            sportIcon,
+            'SPECIALS',
+            'Mecz 60m (1X2)',
+            `Mecz (60 min): ${regT} wygra`,
+            probToFairBookieOdd(regP, 1.06),
+            regP,
+            projStr
+          );
+        }
+      }
+
+      if (m.sport === 'TENNIS' && sim.setsUnder25Prob) {
+        // Liczba setów (-2.5 / +2.5) oraz Sety Handicap (+1.5 seta) ze screena STS!
+        const is2Sets = sim.setsUnder25Prob >= 50;
+        const setsP = is2Sets ? sim.setsUnder25Prob : sim.setsOver25Prob;
+        addPick(
+          `${m.id}_SETS_OU`,
+          m,
+          sportIcon,
+          'SPECIALS',
+          'Liczba setów',
+          `Liczba setów: ${is2Sets ? '-2.5 (2 sety)' : '+2.5 (3 sety)'}`,
+          probToFairBookieOdd(setsP, 1.06),
+          setsP,
+          projStr
+        );
+
+        // Sety - handicap: faworyt wygra przynajmniej 1 seta (+1.5 seta)
+        const favHome = sim.homeWinProb >= 50;
+        const win1SetProb = clamp((favHome ? sim.homeWinProb : sim.awayWinProb) + 16.5, 62, 85);
+        const favName = favHome ? homeTeam.name : awayTeam.name;
+        addPick(
+          `${m.id}_SET_HCP_PLUS`,
+          m,
+          sportIcon,
+          'HANDICAP',
+          'Sety - handicap',
+          `Sety - handicap: ${favName} (+1.5 seta)`,
+          probToFairBookieOdd(win1SetProb, 1.06),
+          win1SetProb,
+          projStr
+        );
+      }
+
+      if (m.sport === 'BASKETBALL' && sim.winBy1to7Prob) {
+        const favTeam = sim.favIsHome ? homeTeam : awayTeam;
+        const pick1to7 = sim.winBy1to7Prob >= sim.winBy8to14Prob;
+        const marginProb = pick1to7 ? sim.winBy1to7Prob : sim.winBy8to14Prob;
+        addPick(
+          `${m.id}_MARGIN`,
+          m,
+          sportIcon,
+          'SPECIALS',
+          'Różnica zwycięstwa',
+          `Różnica zwycięstwa: ${favTeam.name} (${pick1to7 ? '1-7 pkt' : '8-14 pkt'})`,
+          probToFairBookieOdd(marginProb, 1.08),
+          marginProb,
+          projStr
+        );
       }
     });
 
@@ -748,32 +1036,52 @@ export default function App() {
 
   const visiblePicks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const riskObj = LINE_RISK_PROFILES.find((r) => r.id === lineRiskProfile) || LINE_RISK_PROFILES[2];
+
     return allPicks.filter((p) => {
       if (dateFilter !== 'ALL_UPCOMING' && p.match.dayBucket !== dateFilter) return false;
       if (activeSport !== 'ALL' && p.sport !== activeSport) return false;
       if (activeCountry !== 'ALL' && p.match.country !== activeCountry) return false;
       if (marketFilter !== 'ALL' && p.marketType !== marketFilter) return false;
-      if (q && !`${p.match.homeTeam.name} ${p.match.awayTeam.name} ${p.match.leagueName}`.toLowerCase().includes(q)) return false;
+      // Jeśli filtrujemy drabinkę O/U lub Handicapów, respektujemy wybrany przedział prawdopodobieństwa od-do
+      if ((p.marketType === 'TOTAL' || p.marketType === 'HANDICAP') && (p.prob < riskObj.minProb || p.prob > riskObj.maxProb)) {
+        return false;
+      }
+      if (q && !`${p.match.homeTeam.name} ${p.match.awayTeam.name} ${p.match.leagueName} ${p.selectionName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [allPicks, dateFilter, activeSport, activeCountry, marketFilter, searchQuery]);
+  }, [allPicks, dateFilter, activeSport, activeCountry, marketFilter, searchQuery, lineRiskProfile]);
 
-  // Automatyczny kreator kuponu bierze TYLKO mecze ze zweryfikowanymi statystykami/rankingiem (p.hasHardData === true)!
-  const buildAutoCoupon = (minOdds = targetMinOdds, strat = builderStrategy, scope = builderScope, sports = includedSports, dFilter = dateFilter) => {
+  const buildAutoCoupon = (
+    minOdds = targetMinOdds,
+    strat = builderStrategy,
+    scope = builderScope,
+    sports = includedSports,
+    dFilter = dateFilter,
+    riskProf = lineRiskProfile
+  ) => {
     setTargetMinOdds(minOdds);
     setBuilderStrategy(strat);
     setBuilderScope(scope);
+    setMarketFilter(scope);
+    setLineRiskProfile(riskProf);
+
+    const riskObj = LINE_RISK_PROFILES.find((r) => r.id === riskProf) || LINE_RISK_PROFILES[0];
 
     let pool = allPicks.filter(
       (p) =>
         p.hasHardData &&
         sports.includes(p.sport) &&
         (dFilter === 'ALL_UPCOMING' || p.match.dayBucket === dFilter) &&
-        p.odds >= 1.20 &&
-        p.prob >= 50
+        p.odds >= 1.15 &&
+        p.prob >= (scope === 'SPECIALS' ? 24 : riskObj.minProb) &&
+        p.prob <= (scope === 'ML' ? 88 : riskObj.maxProb)
     );
 
-    if (scope === 'ML_ONLY') pool = pool.filter((p) => p.marketType === 'ML');
+    if (scope !== 'ALL') {
+      pool = pool.filter((p) => p.marketType === scope);
+    }
+
     if (strat === 'safe') pool.sort((a, b) => b.prob - a.prob);
     else if (strat === 'value') pool.sort((a, b) => b.ev - a.ev);
     else pool.sort((a, b) => b.score - a.score);
@@ -794,7 +1102,7 @@ export default function App() {
 
   useEffect(() => {
     if (allPicks.length > 0 && couponPickIds.length === 0) {
-      buildAutoCoupon(2.0, 'safe', 'ML_ONLY', includedSports, dateFilter);
+      buildAutoCoupon(2.0, 'safe', 'ML', includedSports, dateFilter, lineRiskProfile);
     }
   }, [allPicks]);
 
@@ -835,18 +1143,19 @@ export default function App() {
     };
   }, [couponPicks, taxRate, couponStake]);
 
-  // Kafelek telemetrii dostosowany do konkretnego sportu (bez koszykarskich zbiórek w piłce i tenisie!)
+  // Rozbudowany widok Laboratorium z pełną interaktywną drabinką Over/Under i Handicapów dla danego meczu!
   const renderLabDetails = (m) => {
     const { homeTeam, awayTeam, sim, liveInjuries } = m;
     const hInj = liveInjuries?.home || [];
     const aInj = liveInjuries?.away || [];
-    const unitName = m.sport === 'BASKETBALL' ? 'pkt' : 'gola';
+    const unitName = m.sport === 'BASKETBALL' ? 'pkt' : m.sport === 'TENNIS' ? 'gemów' : 'goli';
+    const matchPicks = allPicks.filter((p) => p.match.id === m.id);
 
     return (
       <div className="mt-3 pt-3 border-t border-indigo-500/40 bg-slate-950/95 rounded-xl p-3.5 text-xs space-y-3">
         <div className="flex items-center justify-between">
           <span className="font-bold text-indigo-400 uppercase tracking-wider text-[10px]">
-            🔬 Telemetria Spotkania • {sim.modelTag}
+            🔬 Telemetria & Drabinka Linii • {sim.modelTag}
           </span>
           <span className="text-[11px] text-slate-400 font-mono">{m.dateLabel}</span>
         </div>
@@ -862,105 +1171,81 @@ export default function App() {
             {sim.drawProb > 0 && <div style={{ width: `${sim.drawProb}%` }} className="bg-slate-600 h-full" />}
             <div style={{ width: `${sim.homeWinProb}%` }} className="bg-orange-500 h-full" />
           </div>
-          {m.sport === 'HOCKEY' && sim.regHomeProb && (
+          {(m.sport === 'HOCKEY' || m.sport === 'BASKETBALL') && sim.regHomeProb && (
             <div className="text-[10px] text-slate-400 text-center pt-0.5 font-mono">
-              Czas regulaminowy 60m (1X2): {awayTeam.short} {sim.regAwayProb.toFixed(1)}% | Remis {sim.regDrawProb.toFixed(1)}% | {homeTeam.short} {sim.regHomeProb.toFixed(1)}%
+              Czas regulaminowy (1X2): {awayTeam.short} {sim.regAwayProb.toFixed(1)}% | Remis {sim.regDrawProb.toFixed(1)}% | {homeTeam.short} {sim.regHomeProb.toFixed(1)}%
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center font-mono text-[11px]">
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Bilans / Ranking</div>
-            <div className="text-white font-bold mt-0.5">
-              {awayTeam.record} vs <span className="text-orange-400">{homeTeam.record}</span>
+        {/* Tabela Drabinki Sumy Goli / Gemów / Punktów (od najniższej do najwyższej linii jak w STS!) */}
+        {sim.totalsLadder && sim.totalsLadder.length > 0 && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5">
+            <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1.5">
+              📊 Pełna Drabinka Liczby {unitName.toUpperCase()} (Rozkład prawdopodobieństwa od-do):
             </div>
-            <div className="text-[9px] text-slate-400 mt-0.5">
-              {awayTeam.splitRecord} | {homeTeam.splitRecord}
-            </div>
-          </div>
-
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Siła Pitagorejska (Śr./Mecz)</div>
-            <div className="text-emerald-400 font-bold mt-0.5">
-              {Math.round(awayTeam.pythagoreanWinPct * 100)}% vs <span className="text-orange-400">{Math.round(homeTeam.pythagoreanWinPct * 100)}%</span>
-            </div>
-            <div className="text-[9px] text-slate-400 mt-0.5">
-              Śr. {awayTeam.avgPtsFor}:{awayTeam.avgPtsAgainst} | {homeTeam.avgPtsFor}:{homeTeam.avgPtsAgainst}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center font-mono text-[10px]">
+              {sim.totalsLadder.map((r) => (
+                <div key={r.line} className="bg-slate-950 p-1.5 rounded border border-slate-800/80">
+                  <div className="text-orange-400 font-black">Linia {r.line}</div>
+                  <div className="text-emerald-400">+{r.line}: {r.overProb.toFixed(0)}% ({probToFairBookieOdd(r.overProb, 1.06)})</div>
+                  <div className="text-indigo-300">-{r.line}: {r.underProb.toFixed(0)}% ({probToFairBookieOdd(r.underProb, 1.06)})</div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Kafelek nr 3 dopasowany ściśle do dyscypliny sportowej! */}
-          {m.sport === 'BASKETBALL' ? (
-            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-              <div className="text-[9px] text-slate-400 uppercase">Four Factors (eFG% / Zb.)</div>
-              <div className="text-indigo-300 font-bold mt-0.5">
-                {awayTeam.efgPct}% vs <span className="text-orange-400">{homeTeam.efgPct}%</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5">
-                REB: {awayTeam.rebounds}/{homeTeam.rebounds} • TOV: {awayTeam.turnovers}/{homeTeam.turnovers}
-              </div>
+        {/* Wszystkie wygenerowane zakłady dla tego meczu gotowe do kliknięcia */}
+        {matchPicks.length > 0 && (
+          <div className="bg-slate-900/90 border border-indigo-500/30 rounded-lg p-2.5 space-y-2">
+            <div className="text-[10px] font-bold uppercase text-orange-400">
+              🎯 Kliknij dowolny zakład z drabinki poniżej, aby dodać go na kupon ({matchPicks.length} opcji):
             </div>
-          ) : m.sport === 'TENNIS' ? (
-            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-              <div className="text-[9px] text-slate-400 uppercase">Profil ATP/WTA</div>
-              <div className="text-indigo-300 font-bold mt-0.5">
-                {awayTeam.tennisRank ? `#${awayTeam.tennisRank}` : 'Kwal.'} vs <span className="text-orange-400">{homeTeam.tennisRank ? `#${homeTeam.tennisRank}` : 'Kwal.'}</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5">
-                {sim.hasHardData ? 'Dane zweryfikowane' : 'Brak kursów w API'}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-              <div className="text-[9px] text-slate-400 uppercase">Bilans Bramek (Atak/Obrona)</div>
-              <div className="text-indigo-300 font-bold mt-0.5">
-                {awayTeam.avgPtsFor} vs <span className="text-orange-400">{homeTeam.avgPtsFor}</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5">
-                Stracone śr.: {awayTeam.avgPtsAgainst} / {homeTeam.avgPtsAgainst}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Composite Power Index</div>
-            <div className="text-white font-bold mt-0.5">
-              {(awayTeam.compositePower * 100).toFixed(1)} vs <span className="text-orange-400">{(homeTeam.compositePower * 100).toFixed(1)}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1">
+              {matchPicks.map((mp) => {
+                const isSelected = couponPickIds.includes(mp.id);
+                return (
+                  <button
+                    key={mp.id}
+                    onClick={() => togglePickInCoupon(mp)}
+                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
+                      isSelected
+                        ? 'bg-emerald-500/20 border-emerald-500 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="truncate pr-2">
+                      <span className="text-[9px] text-indigo-400 font-bold block">{mp.marketBadge}</span>
+                      <span className="text-[11px] font-bold truncate block">{mp.selectionName}</span>
+                    </div>
+                    <div className="text-right shrink-0 font-mono">
+                      <span className="text-[10px] text-emerald-400 block">{mp.prob.toFixed(1)}%</span>
+                      <span className="text-xs font-black text-orange-400">{mp.odds.toFixed(2)}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
-
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Prognoza Wyniku</div>
-            <div className="text-emerald-400 font-bold mt-0.5">
-              {sim.expAway.toFixed(1)} : {sim.expHome.toFixed(1)} (Σ {sim.expTotal.toFixed(1)})
-            </div>
-          </div>
-
-          <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-            <div className="text-[9px] text-slate-400 uppercase">Linia Suma {sim.totalLine}</div>
-            <div className="text-indigo-300 font-bold mt-0.5">
-              Over: {sim.overProb.toFixed(1)}% / Under: {(100 - sim.overProb).toFixed(1)}%
-            </div>
-          </div>
-        </div>
+        )}
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
           <div className="flex flex-wrap justify-between gap-2">
-            <span>Aktywny lider {awayTeam.short}: <strong className="text-indigo-300">{awayTeam.leader}</strong></span>
-            <span>Aktywny lider {homeTeam.short}: <strong className="text-orange-300">{homeTeam.leader}</strong></span>
+            <span>Bilans: <strong>{awayTeam.record} vs {homeTeam.record}</strong></span>
+            <span>Liderzy: <strong className="text-indigo-300">{awayTeam.leader}</strong> vs <strong className="text-orange-300">{homeTeam.leader}</strong></span>
           </div>
 
           {(hInj.length > 0 || aInj.length > 0) ? (
             <div className="pt-1.5 border-t border-rose-500/30 text-rose-300 text-[10px] space-y-1">
               <div className="font-bold text-rose-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> Raport Kontuzji (Wpływ netto: {sim.netInjDiff > 0 ? `+${sim.netInjDiff.toFixed(2)} ${unitName} dla ${homeTeam.short}` : `${sim.netInjDiff.toFixed(2)} ${unitName}`}):
+                <AlertTriangle className="w-3.5 h-3.5" /> Raport Kontuzji uwzględniony w wyliczeniach:
               </div>
               {aInj.map((inj, i) => (
-                <div key={`ai_${i}`}>• <strong>{awayTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} {unitName})</div>
+                <div key={`ai_${i}`}>• <strong>{awayTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact})</div>
               ))}
               {hInj.map((inj, i) => (
-                <div key={`hi_${i}`}>• <strong>{homeTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact} {unitName})</div>
+                <div key={`hi_${i}`}>• <strong>{homeTeam.short}</strong>: {inj.name} [{inj.role}] — {inj.status} (-{inj.impact})</div>
               ))}
             </div>
           ) : (
@@ -980,7 +1265,7 @@ export default function App() {
           <Ticket className="w-5 h-5 text-orange-400" />
           <div>
             <h3 className="text-base font-black text-white">Twój Kupon AKO ({couponPicks.length})</h3>
-            <p className="text-[10px] text-slate-400">Kliknij na spotkanie poniżej, aby rozwinąć pełną telemetrię i kontuzje</p>
+            <p className="text-[10px] text-slate-400">Kliknij na spotkanie poniżej, aby zmienić linię z drabinki lub zobaczyć statystyki</p>
           </div>
         </div>
         {couponPicks.length > 0 && (
@@ -995,7 +1280,7 @@ export default function App() {
 
       {couponPicks.length === 0 ? (
         <div className="text-center py-6 px-4 border border-dashed border-slate-800 rounded-xl text-xs text-slate-400">
-          Brak zdarzeń na kuponie. Kliknij np. <strong>Kurs 2.00+</strong> powyżej.
+          Brak zdarzeń na kuponie. Wybierz powyżej rynek (np. <strong>Drabinka Over/Under</strong> lub <strong>Handicapy</strong>) i kliknij docelowy kurs.
         </div>
       ) : (
         <>
@@ -1017,7 +1302,10 @@ export default function App() {
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-orange-300">
                           {item.sportIcon} {item.match.country}
                         </span>
-                        <span className="text-[10px] font-mono text-indigo-300">{item.match.dateLabel}</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                          {item.marketBadge}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">{item.match.dateLabel}</span>
                         <span className="text-[10px] text-emerald-400 font-mono font-bold">{item.prob.toFixed(1)}%</span>
                         {injCount > 0 && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
@@ -1127,10 +1415,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v6.6
+                  QUANT<span className="text-orange-500">BET</span> LIVE v6.8
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Verified Data & Star Injury AI
+                  Full Ladder STS Engine
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
@@ -1144,7 +1432,7 @@ export default function App() {
                 mainTab === 'builder' ? 'bg-orange-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" /> Kreator AKO & Ranking
+              <Sparkles className="w-3.5 h-3.5" /> Kreator AKO & Drabinki
             </button>
             <button
               onClick={() => setMainTab('lab')}
@@ -1189,7 +1477,7 @@ export default function App() {
                   key={d.id}
                   onClick={() => {
                     setDateFilter(d.id);
-                    buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, includedSports, d.id);
+                    buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, includedSports, d.id, lineRiskProfile);
                   }}
                   className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap flex items-center gap-1 ${
                     dateFilter === d.id ? 'bg-orange-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
@@ -1251,31 +1539,48 @@ export default function App() {
         <main className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-5">
             <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/60 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-orange-400" />
-                    Kreator Kuponów AKO (Tylko Zweryfikowane Dane Meczowe)
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Odrzuca mecze kwalifikacyjne bez bilansu/rankingu i rozpoznaje kontuzjowane gwiazdy (np. A. Edwards).
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-orange-400" />
+                  Kreator Kuponów AKO (Pełne Drabinki Goli, Gemów, Punktów i Handicapów)
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Wybierz rodzaj rynku oraz przedział bezpieczeństwa linii (np. Bezpieczne linie 60%–78% lub Linie główne 50/50).
+                </p>
+              </div>
 
-                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              {/* WYBÓR RYNKU DO KUPONU */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
+                {MARKET_SCOPES.map((ms) => (
                   <button
-                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, 'ML_ONLY', includedSports, dateFilter)}
-                    className={`px-3 py-1 rounded-lg font-bold ${builderScope === 'ML_ONLY' ? 'bg-orange-500 text-slate-950' : 'text-slate-400'}`}
+                    key={ms.id}
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, ms.id, includedSports, dateFilter, lineRiskProfile)}
+                    className={`py-2 px-2 rounded-lg font-bold transition-all text-center ${
+                      builderScope === ms.id
+                        ? 'bg-orange-500 text-slate-950 shadow-md'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
                   >
-                    Tylko Zwycięzcy (1/2)
+                    {ms.label}
                   </button>
+                ))}
+              </div>
+
+              {/* WYBÓR PRZEDZIAŁU LINII OD-DO WEDŁUG PRAWDOPODOBIEŃSTWA */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-950/80 p-2 rounded-xl border border-slate-800/90 text-xs">
+                {LINE_RISK_PROFILES.map((rp) => (
                   <button
-                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, 'ALL', includedSports, dateFilter)}
-                    className={`px-3 py-1 rounded-lg font-bold ${builderScope === 'ALL' ? 'bg-orange-500 text-slate-950' : 'text-slate-400'}`}
+                    key={rp.id}
+                    onClick={() => buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, includedSports, dateFilter, rp.id)}
+                    className={`py-1.5 px-2.5 rounded-lg font-bold transition-all ${
+                      lineRiskProfile === rp.id
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
                   >
-                    Wszystkie Rynki (z O/U)
+                    {rp.label}
                   </button>
-                </div>
+                ))}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -1289,7 +1594,7 @@ export default function App() {
                           ? (includedSports.length > 1 ? includedSports.filter((x) => x !== sp.id) : includedSports)
                           : [...includedSports, sp.id];
                         setIncludedSports(next);
-                        buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, next, dateFilter);
+                        buildAutoCoupon(targetMinOdds, builderStrategy, builderScope, next, dateFilter, lineRiskProfile);
                       }}
                       className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between transition-all ${
                         checked ? 'bg-emerald-500/15 border-emerald-500/60 text-white' : 'bg-slate-950 border-slate-800 text-slate-500'
@@ -1306,7 +1611,7 @@ export default function App() {
                 {[2.0, 3.0, 5.0, 8.0].map((t) => (
                   <button
                     key={t}
-                    onClick={() => buildAutoCoupon(t, builderStrategy, builderScope, includedSports, dateFilter)}
+                    onClick={() => buildAutoCoupon(t, builderStrategy, builderScope, includedSports, dateFilter, lineRiskProfile)}
                     className={`p-3 rounded-xl border text-left transition-all ${
                       Math.abs(targetMinOdds - t) < 0.1
                         ? 'bg-orange-500/20 border-orange-500 text-white shadow'
@@ -1334,7 +1639,7 @@ export default function App() {
                     max="15.0"
                     step="0.25"
                     value={targetMinOdds}
-                    onChange={(e) => buildAutoCoupon(Number(e.target.value), builderStrategy, builderScope, includedSports, dateFilter)}
+                    onChange={(e) => buildAutoCoupon(Number(e.target.value), builderStrategy, builderScope, includedSports, dateFilter, lineRiskProfile)}
                     className="w-full accent-orange-500 cursor-pointer"
                   />
                 </div>
@@ -1347,7 +1652,7 @@ export default function App() {
                   ].map((st) => (
                     <button
                       key={st.id}
-                      onClick={() => buildAutoCoupon(targetMinOdds, st.id, builderScope, includedSports, dateFilter)}
+                      onClick={() => buildAutoCoupon(targetMinOdds, st.id, builderScope, includedSports, dateFilter, lineRiskProfile)}
                       className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
                         builderStrategy === st.id ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
                       }`}
@@ -1368,10 +1673,10 @@ export default function App() {
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     <Target className="w-5 h-5 text-emerald-400" />
-                    Pełna Lista Typów Modelu ({visiblePicks.length})
+                    Pełna Lista Typów z Drabinki ({visiblePicks.length})
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Posortowano według: <strong className="text-orange-400">{builderStrategy === 'safe' ? 'Najwyższe Prawdopodobieństwo (%)' : builderStrategy === 'value' ? 'Najwyższe Value (EV%)' : 'Indeks Zbalansowany'}</strong>
+                    Filtr rynku: <strong className="text-orange-400">{MARKET_SCOPES.find((m) => m.id === marketFilter)?.label}</strong>
                   </p>
                 </div>
 
@@ -1380,23 +1685,27 @@ export default function App() {
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Szukaj drużyny / gracza..."
+                      placeholder="Szukaj drużyny / linii..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs overflow-x-auto">
                     {[
                       { id: 'ALL', label: 'Wszystkie' },
-                      { id: 'ML', label: 'Zwycięzca (1/2)' },
-                      { id: 'TOTAL', label: 'Over/Under' }
+                      { id: 'ML', label: 'Zwycięzca/DNB' },
+                      { id: 'TOTAL', label: 'Drabinka O/U' },
+                      { id: 'HANDICAP', label: 'Handicapy' },
+                      { id: 'SPECIALS', label: '1X/X2 & BTTS' }
                     ].map((f) => (
                       <button
                         key={f.id}
                         onClick={() => setMarketFilter(f.id)}
-                        className={`px-2.5 py-1 rounded-lg font-semibold ${marketFilter === f.id ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
+                        className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap ${
+                          marketFilter === f.id ? 'bg-slate-800 text-white' : 'text-slate-400'
+                        }`}
                       >
                         {f.label}
                       </button>
@@ -1427,17 +1736,15 @@ export default function App() {
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-800 text-orange-300">
                               {pick.sportIcon} {pick.match.leagueName}
                             </span>
-                            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                              {pick.marketBadge}
+                            </span>
+                            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {pick.match.dateLabel}
                             </span>
                             {injCount > 0 && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                                 🚑 Kontuzje ({injCount})
-                              </span>
-                            )}
-                            {!pick.hasHardData && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                Brak bilansu w API (Wpisz kurs z STS)
                               </span>
                             )}
                             <span className="text-[11px] text-slate-400 font-mono">
@@ -1505,7 +1812,7 @@ export default function App() {
                     onClick={() => setDisplayLimit((prev) => prev + 100)}
                     className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-orange-400 border border-slate-700"
                   >
-                    Pokaż więcej spotkań ({visiblePicks.length - displayLimit} pozostałych)
+                    Pokaż więcej pozycji z drabinki ({visiblePicks.length - displayLimit} pozostałych)
                   </button>
                 </div>
               )}
@@ -1561,37 +1868,6 @@ export default function App() {
                   {labMatch.awayTeam.name} vs {labMatch.homeTeam.name}
                 </h2>
                 <p className="text-xs text-indigo-400 mt-1">Model: {labSimCustom.modelTag}</p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-xs text-slate-400">{labMatch.awayTeam.name}</div>
-                  <div className="text-3xl font-black text-indigo-400 font-mono mt-1">
-                    {labSimCustom.awayWinProb.toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-slate-300 mt-1 font-mono">
-                    Prognoza: {labSimCustom.expAway.toFixed(1)}
-                  </div>
-                </div>
-
-                {labSimCustom.drawProb > 0 && (
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-center">
-                    <div className="text-xs text-slate-400">Remis (X)</div>
-                    <div className="text-3xl font-black text-slate-300 font-mono mt-1">
-                      {labSimCustom.drawProb.toFixed(1)}%
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-xs text-slate-400">{labMatch.homeTeam.name}</div>
-                  <div className="text-3xl font-black text-orange-400 font-mono mt-1">
-                    {labSimCustom.homeWinProb.toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-slate-300 mt-1 font-mono">
-                    Prognoza: {labSimCustom.expHome.toFixed(1)}
-                  </div>
-                </div>
               </div>
 
               {renderLabDetails({ ...labMatch, sim: labSimCustom })}
