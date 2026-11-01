@@ -37,8 +37,8 @@ const LIVE_LEAGUE_ENDPOINTS = [
   { sport: 'BASKETBALL', country: 'USA (NCAA)', name: 'NCAA Basket', path: 'basketball/mens-college-basketball', avgScore: 74.5, std: 11.0, deepScan: false },
   { sport: 'HOCKEY', country: 'USA / Kanada', name: 'NHL', path: 'hockey/nhl', avgScore: 3.1, std: 1.6, deepScan: true },
   { sport: 'HOCKEY', country: 'Ameryka Płn.', name: 'NCAA Hockey', path: 'hockey/mens-college-hockey', avgScore: 2.9, std: 1.6, deepScan: false },
-  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.0, std: 3.6, deepScan: false },
-  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.0, std: 3.6, deepScan: false },
+  { sport: 'TENNIS', country: 'ATP Tour', name: 'ATP Mężczyźni', path: 'tennis/atp', avgScore: 22.2, std: 5.2, deepScan: false },
+  { sport: 'TENNIS', country: 'WTA Tour', name: 'WTA Kobiety', path: 'tennis/wta', avgScore: 20.4, std: 5.2, deepScan: false },
   { sport: 'VOLLEYBALL', country: 'Międzynarodowe / Liga', name: 'Siatkówka Liga', path: 'volleyball/mens-college-volleyball', avgScore: 181.5, std: 14.0, deepScan: false },
   { sport: 'SOCCER', country: 'Europa (LM)', name: 'Liga Mistrzów', path: 'soccer/uefa.champions', avgScore: 1.48, deepScan: true },
   { sport: 'SOCCER', country: 'Europa (LE)', name: 'Liga Europy', path: 'soccer/uefa.europa', avgScore: 1.42, deepScan: false },
@@ -437,6 +437,7 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
     };
   }
 
+  // TENIS (ATP vs WTA) & SIATKÓWKA - Skalibrowana baza gemów i odchylenie standardowe 5.2!
   if (sport === 'TENNIS' || sport === 'VOLLEYBALL') {
     const eloH = 1850 + homeTeam.compositePower * 360 - hPen * 25;
     const eloA = 1850 + awayTeam.compositePower * 360 - aPen * 25;
@@ -449,8 +450,14 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
 
     pH = clamp(pH, 16, 84);
     const closeness = 1 - Math.abs(pH - 50) / 50;
-    const expTotal = sport === 'VOLLEYBALL' ? 176 + closeness * 12 : 18.0 + closeness * 4.8;
-    const stdTotal = sport === 'VOLLEYBALL' ? 13.5 : 3.6;
+
+    // Osobna baza gemów dla kobiecego WTA (~20.5 gema) oraz męskiego ATP (~22.2 gema) + szerszy rozrzut 5.2
+    const isWTA = cfg.path === 'tennis/wta';
+    const tennisBase = isWTA ? 16.5 : 18.2;
+    const expTotal = sport === 'VOLLEYBALL'
+      ? 176 + closeness * 12
+      : (realOddsInfo?.totalLine || (tennisBase + closeness * 4.3));
+    const stdTotal = sport === 'VOLLEYBALL' ? 13.5 : 5.2;
 
     const baseCenter = Math.floor(expTotal) + 0.5;
     const ladderLines = [];
@@ -466,10 +473,10 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       return { line, overProb, underProb: 100 - overProb };
     });
 
-    const expGameMarginHome = ((pH - 50) / 50) * 5.8;
+    const expGameMarginHome = ((pH - 50) / 50) * 5.6;
     const hcpLines = [-5.5, -4.5, -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
     const handicapLadder = hcpLines.map((hLine) => {
-      const covH = clamp((1 - normalCDF(-hLine, expGameMarginHome, 3.8)) * 100, 12, 88);
+      const covH = clamp((1 - normalCDF(-hLine, expGameMarginHome, 4.6)) * 100, 12, 88);
       return { lineHome: hLine, homeCoverProb: covH, awayCoverProb: 100 - covH };
     });
 
@@ -501,7 +508,7 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
       setsOver25Prob,
       netInjDiff,
       hasHardData,
-      modelTag: sport === 'TENNIS' ? 'ATP/WTA Rank ELO' : 'Volley Set-Point Gauss'
+      modelTag: sport === 'TENNIS' ? (isWTA ? 'WTA Rank ELO (Linia ~20.5)' : 'ATP Rank ELO (Linia ~22.2)') : 'Volley Set-Point Gauss'
     };
   }
 
@@ -591,7 +598,7 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
 }
 
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v7.2 STRICT PRE-MATCH & AUTO-REFRESH)
+// GŁÓWNY KOMPONENT APLIKACJI (v7.3 ATP/WTA CALIBRATED & STRICT PRE-MATCH)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
@@ -669,7 +676,7 @@ export default function App() {
             const rawDateStr = comp.date || comp.startDate || ev.date;
             const eventTimeMs = rawDateStr ? new Date(rawDateStr).getTime() : nowMs + 3600000;
 
-            // Odrzucamy każdy mecz, którego godzina rozpoczęcia już minęła (np. mecz z 23:00 sprawdzany o 24:00)!
+            // Odrzucamy każdy mecz, którego godzina rozpoczęcia już minęła!
             if (eventTimeMs <= nowMs) continue;
 
             const diffHours = (eventTimeMs - nowMs) / 3600000;
@@ -798,21 +805,17 @@ export default function App() {
     }
   }, []);
 
-  // Inicjalne pobranie + automatyczne odświeżanie w tle co 5 minut + zegar lokalny co 60 sekund + wybudzenie karty
   useEffect(() => {
     fetchLiveGlobalSchedule();
 
-    // Zegar lokalny: co 60 sekund aktualizuje currentTimeMs, natychmiast odcinając mecze, których godzina startu właśnie wybiła
     const clockInterval = setInterval(() => {
       setCurrentTimeMs(Date.now());
     }, 60 * 1000);
 
-    // Pełna synchronizacja z API w tle co 5 minut
     const apiRefreshInterval = setInterval(() => {
       fetchLiveGlobalSchedule();
     }, 5 * 60 * 1000);
 
-    // Odświeżenie przy powrocie do przeglądarki na telefonie / komputerze
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         setCurrentTimeMs(Date.now());
@@ -828,7 +831,6 @@ export default function App() {
     };
   }, [fetchLiveGlobalSchedule]);
 
-  // Aktywne mecze w czasie rzeczywistym (automatycznie wyrzuca spotkania, które wystartowały w trakcie trzymania otwartej strony)
   const upcomingMatches = useMemo(() => {
     return matches.filter((m) => m.eventTimeMs > currentTimeMs);
   }, [matches, currentTimeMs]);
@@ -1602,10 +1604,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v7.2
+                  QUANT<span className="text-orange-500">BET</span> LIVE v7.3
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Strict Pre-Match & Auto-Sync
+                  ATP/WTA Calibrated & Strict Pre-Match
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
