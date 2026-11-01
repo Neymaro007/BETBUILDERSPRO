@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Activity, RefreshCw, Sliders, Calendar, Zap, Sparkles,
   Ticket, Plus, Trash2, Target, Check, Edit3, Globe,
@@ -591,12 +591,13 @@ function computeDynamicPrediction(match, customMod = { hInj: 0, aInj: 0 }) {
 }
 
 // ============================================================================
-// GŁÓWNY KOMPONENT APLIKACJI (v7.1 FIXED DUO & SUREBETS ACROSS ALL MARKETS)
+// GŁÓWNY KOMPONENT APLIKACJI (v7.2 STRICT PRE-MATCH & AUTO-REFRESH)
 // ============================================================================
 export default function App() {
   const [matches, setMatches] = useState([]);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
-  const [syncInfo, setSyncInfo] = useState('Skanowanie telemetrii meczowej, Four Factors i raportów kontuzji...');
+  const [syncInfo, setSyncInfo] = useState('Skanowanie telemetrii przedmeczowej, Four Factors i raportów kontuzji...');
 
   const [mainTab, setMainTab] = useState('builder');
   const [mobileCouponModalOpen, setMobileCouponModalOpen] = useState(false);
@@ -613,7 +614,7 @@ export default function App() {
   const [builderStrategy, setBuilderStrategy] = useState('safe');
   const [builderScope, setBuilderScope] = useState('ML');
   const [lineRiskProfile, setLineRiskProfile] = useState('SAFE_LADDER');
-  const [activeSpecialMode, setActiveSpecialMode] = useState('DUO_2'); // Domyślnie Złoty Dublet 2.00+
+  const [activeSpecialMode, setActiveSpecialMode] = useState('DUO_2');
   const [taxRate, setTaxRate] = useState(true);
   const [couponStake, setCouponStake] = useState(2);
   const [customOddsMap, setCustomOddsMap] = useState({});
@@ -624,9 +625,10 @@ export default function App() {
   const [labHomeInj, setLabHomeInj] = useState(0);
   const [labAwayInj, setLabAwayInj] = useState(0);
 
-  const fetchLiveGlobalSchedule = async () => {
+  const fetchLiveGlobalSchedule = useCallback(async () => {
     setIsLoading(true);
     const nowMs = Date.now();
+    setCurrentTimeMs(nowMs);
     const collectedMap = new Map();
     const fmtDate = (ms) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
     const datesToFetch = ['', `?dates=${fmtDate(nowMs)}`, `?dates=${fmtDate(nowMs + 86400000)}`];
@@ -660,12 +662,17 @@ export default function App() {
           for (const { comp, ev } of rawCompetitions) {
             const statusObj = comp.status || ev.status;
             const state = statusObj?.type?.state;
-            if (state === 'post' || statusObj?.type?.completed) continue;
+
+            // ŚCISŁA BLOKADA PRZEDMECZOWA: Odrzucamy mecze zakończone ('post') ORAZ mecze już trwające na żywo ('in')!
+            if (state !== 'pre' || statusObj?.type?.completed) continue;
 
             const rawDateStr = comp.date || comp.startDate || ev.date;
             const eventTimeMs = rawDateStr ? new Date(rawDateStr).getTime() : nowMs + 3600000;
+
+            // Odrzucamy każdy mecz, którego godzina rozpoczęcia już minęła (np. mecz z 23:00 sprawdzany o 24:00)!
+            if (eventTimeMs <= nowMs) continue;
+
             const diffHours = (eventTimeMs - nowMs) / 3600000;
-            if (state === 'pre' && diffHours < -0.5) continue;
 
             const competitors = comp.competitors || [];
             if (competitors.length < 2) continue;
@@ -779,26 +786,57 @@ export default function App() {
 
       const finalArr = allCollected.sort((a, b) => a.eventTimeMs - b.eventTimeMs);
       setMatches(finalArr);
-      if (finalArr.length > 0) setLabSelectedMatchId(finalArr[0].id);
+      if (finalArr.length > 0) setLabSelectedMatchId((prev) => prev || finalArr[0].id);
       const nowTime = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
       setSyncInfo(
-        `Telemetria Live (${nowTime}): ${finalArr.length} meczów • Uwzględniono ${totalInjuriesCount} raportów kontuzji`
+        `Tylko Przedmeczowe (${nowTime}): ${finalArr.length} spotkań • Auto-odświeżanie aktywne • ${totalInjuriesCount} kontuzji`
       );
     } catch (err) {
       setSyncInfo('Błąd sieci podczas synchronizacji.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchLiveGlobalSchedule();
   }, []);
 
+  // Inicjalne pobranie + automatyczne odświeżanie w tle co 5 minut + zegar lokalny co 60 sekund + wybudzenie karty
+  useEffect(() => {
+    fetchLiveGlobalSchedule();
+
+    // Zegar lokalny: co 60 sekund aktualizuje currentTimeMs, natychmiast odcinając mecze, których godzina startu właśnie wybiła
+    const clockInterval = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 60 * 1000);
+
+    // Pełna synchronizacja z API w tle co 5 minut
+    const apiRefreshInterval = setInterval(() => {
+      fetchLiveGlobalSchedule();
+    }, 5 * 60 * 1000);
+
+    // Odświeżenie przy powrocie do przeglądarki na telefonie / komputerze
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setCurrentTimeMs(Date.now());
+        fetchLiveGlobalSchedule();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(clockInterval);
+      clearInterval(apiRefreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchLiveGlobalSchedule]);
+
+  // Aktywne mecze w czasie rzeczywistym (automatycznie wyrzuca spotkania, które wystartowały w trakcie trzymania otwartej strony)
+  const upcomingMatches = useMemo(() => {
+    return matches.filter((m) => m.eventTimeMs > currentTimeMs);
+  }, [matches, currentTimeMs]);
+
   const availableCountries = useMemo(() => {
-    const sub = matches.filter((m) => activeSport === 'ALL' || m.sport === activeSport);
+    const sub = upcomingMatches.filter((m) => activeSport === 'ALL' || m.sport === activeSport);
     return ['ALL', ...Array.from(new Set(sub.map((m) => m.country)))];
-  }, [matches, activeSport]);
+  }, [upcomingMatches, activeSport]);
 
   const allPicks = useMemo(() => {
     const taxMult = taxRate ? 0.88 : 1.0;
@@ -824,7 +862,7 @@ export default function App() {
       });
     };
 
-    matches.forEach((m) => {
+    upcomingMatches.forEach((m) => {
       const { sim, homeTeam, awayTeam, bookieOdds } = m;
       const sportIcon = SPORT_GROUPS.find((s) => s.id === m.sport)?.icon || '🏆';
       const unitLabel = m.sport === 'SOCCER' ? 'goli' : m.sport === 'HOCKEY' ? 'goli' : m.sport === 'TENNIS' ? 'gemów' : 'pkt';
@@ -900,7 +938,7 @@ export default function App() {
       if (builderStrategy === 'value') return b.ev - a.ev;
       return b.score - a.score;
     });
-  }, [matches, taxRate, customOddsMap, builderStrategy]);
+  }, [upcomingMatches, taxRate, customOddsMap, builderStrategy]);
 
   const visiblePicks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -919,9 +957,6 @@ export default function App() {
     });
   }, [allPicks, dateFilter, activeSport, activeCountry, marketFilter, searchQuery, lineRiskProfile]);
 
-  // ==========================================================================
-  // 1. KLASYCZNY KREATOR KUPONU POD KURS DOCELOWY
-  // ==========================================================================
   const buildAutoCoupon = (
     minOdds = targetMinOdds,
     strat = builderStrategy,
@@ -971,9 +1006,6 @@ export default function App() {
     setCouponPickIds(chosen);
   };
 
-  // ==========================================================================
-  // 2. TOP PEWNIAKI BEZ WZGLĘDU NA KURS (Np. 2, 3 lub 4 najpewniejsze mecze)
-  // ==========================================================================
   const buildPureSurebetsCoupon = (
     count = 3,
     scope = builderScope,
@@ -993,7 +1025,6 @@ export default function App() {
       if (!sports.includes(p.sport)) return false;
       if (dFilter !== 'ALL_UPCOMING' && p.match.dayBucket !== dFilter) return false;
       if (scope !== 'ALL' && p.marketType !== scope) return false;
-      // Dla drabinek respektujemy wybrany profil ryzyka, żeby nie brało samych skrajnych linii 1.08
       if (p.marketType === 'TOTAL' || p.marketType === 'HANDICAP') {
         return p.prob >= riskObj.minProb && p.prob <= riskObj.maxProb;
       }
@@ -1013,10 +1044,6 @@ export default function App() {
     setCouponPickIds(chosen);
   };
 
-  // ==========================================================================
-  // 3. NAPRAWIONY ZŁOTY DUBLET (Dokładnie 2 mecze o kursie łącznym >= minTarget
-  // Działa bezbłędnie dla Zwycięzców, Drabinek Punktów/Goli, Handicapów i Mixu!)
-  // ==========================================================================
   const buildOptimalTwoMatchCombo = (
     minTarget = 2.0,
     scope = builderScope,
@@ -1030,8 +1057,6 @@ export default function App() {
     setMarketFilter(scope);
     setLineRiskProfile(riskProf);
 
-    // KROK A: Grupujemy wszystkie dostępne opcje według pojedynczego meczu (match.id),
-    // dzięki czemu żaden pojedynczy mecz z 31 liniami nie zapcha listy kandydatów!
     const byMatch = new Map();
 
     allPicks.forEach((p) => {
@@ -1039,7 +1064,6 @@ export default function App() {
       if (!sports.includes(p.sport)) return;
       if (dFilter !== 'ALL_UPCOMING' && p.match.dayBucket !== dFilter) return;
       if (scope !== 'ALL' && p.marketType !== scope) return;
-      // Do dubletu na kurs 2.00+ lub 3.00+ pojedynczy typ musi mieć kurs w sensownym oknie (1.22 - 2.85)
       if (p.odds < 1.22 || p.odds > 2.85) return;
 
       if (!byMatch.has(p.match.id)) {
@@ -1048,11 +1072,8 @@ export default function App() {
       byMatch.get(p.match.id).push(p);
     });
 
-    // Z każdego meczu bierzemy maksymalnie 6 najmocniejszych wariantów kursowych (od ~1.25 do ~2.20),
-    // aby algorytm mógł idealnie dobrać parę z dwóch różnych spotkań!
     const matchEntries = Array.from(byMatch.entries()).map(([mId, picksArr]) => {
       picksArr.sort((a, b) => b.prob - a.prob);
-      // Wybieramy reprezentantów różnych progów kursowych z tego meczu
       const sampled = [];
       let lastOdd = 0;
       for (const item of picksArr) {
@@ -1068,7 +1089,6 @@ export default function App() {
     let bestPair = null;
     let maxCombinedProb = -1;
 
-    // KROK B: Przeszukujemy wszystkie pary dwóch różnych meczów (Mecz A vs Mecz B)
     for (let i = 0; i < matchEntries.length; i++) {
       for (let j = i + 1; j < matchEntries.length; j++) {
         const optsA = matchEntries[i].options;
@@ -1077,7 +1097,6 @@ export default function App() {
         for (const p1 of optsA) {
           for (const p2 of optsB) {
             const combinedOdds = p1.odds * p2.odds;
-            // Szukamy pary o kursie >= minTarget (i nieprzekraczającym minTarget + 1.6, żeby nie brać szalonych kursów)
             if (combinedOdds >= minTarget && combinedOdds <= minTarget + 1.65) {
               const combinedProb = (p1.prob / 100) * (p2.prob / 100);
               if (combinedProb > maxCombinedProb) {
@@ -1093,7 +1112,6 @@ export default function App() {
     if (bestPair) {
       setCouponPickIds(bestPair);
     } else {
-      // Jeśli zakres jest bardzo wąski, poszerzamy okno bez górnego limitu kursu
       for (let i = 0; i < matchEntries.length; i++) {
         for (let j = i + 1; j < matchEntries.length; j++) {
           for (const p1 of matchEntries[i].options) {
@@ -1113,8 +1131,6 @@ export default function App() {
     }
   };
 
-  // Uniwersalny dispatcher wywoływany przy zmianie Rynku, Sportu, Daty lub Profilu Ryzyka:
-  // utrzymuje wybrany przez Ciebie tryb (np. Złoty Dublet 2.00+ albo Top 2 Mecze)!
   const triggerCurrentModeRebuild = (
     nextScope = builderScope,
     nextSports = includedSports,
@@ -1567,8 +1583,8 @@ export default function App() {
   );
 
   const labMatch = useMemo(() => {
-    return matches.find((m) => m.id === labSelectedMatchId) || matches[0];
-  }, [matches, labSelectedMatchId]);
+    return upcomingMatches.find((m) => m.id === labSelectedMatchId) || upcomingMatches[0];
+  }, [upcomingMatches, labSelectedMatchId]);
 
   const labSimCustom = useMemo(() => {
     if (!labMatch) return null;
@@ -1586,10 +1602,10 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                  QUANT<span className="text-orange-500">BET</span> LIVE v7.1
+                  QUANT<span className="text-orange-500">BET</span> LIVE v7.2
                 </h1>
                 <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Smart Duo & Multi-Market Sync
+                  Strict Pre-Match & Auto-Sync
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">{syncInfo}</p>
@@ -1662,7 +1678,7 @@ export default function App() {
 
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {SPORT_GROUPS.map((sg) => {
-                const count = matches.filter(
+                const count = upcomingMatches.filter(
                   (m) => (dateFilter === 'ALL_UPCOMING' || m.dayBucket === dateFilter) && (sg.id === 'ALL' || m.sport === sg.id)
                 ).length;
                 return (
@@ -1716,7 +1732,7 @@ export default function App() {
                   Kreator Kuponów AKO & Optymalizator Par (Złoty Dublet / Top Pewniaki)
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Złoty Dublet i Top Pewniaki działają teraz z każdym wybranym rynkiem (Zwycięzcy, Drabinka Punktów, Handicapy i Mix)!
+                  Złoty Dublet i Top Pewniaki działają z każdym wybranym rynkiem, uwzględniając wyłącznie mecze nierozpoczęte.
                 </p>
               </div>
 
@@ -1771,7 +1787,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* PASEK WYBORU RYNKU (Utrzymuje aktywny tryb Złoty Dublet / Top 2/3/4!) */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
                 {MARKET_SCOPES.map((ms) => (
                   <button
@@ -1894,7 +1909,7 @@ export default function App() {
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     <Target className="w-5 h-5 text-emerald-400" />
-                    Pełna Lista Spotkań & Drabinki STS ({visiblePicks.length})
+                    Pełna Lista Spotkań Przedmeczowych & Drabinki STS ({visiblePicks.length})
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     Tutaj po kliknięciu ikony suwaków otworzysz zarówno statystyki, jak i pełne drabinki 31 linii punktów oraz handicapów!
@@ -2053,9 +2068,9 @@ export default function App() {
         <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 max-h-[600px] overflow-y-auto space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              Wybierz spotkanie do analizy 1 na 1 ({matches.length})
+              Wybierz spotkanie do analizy 1 na 1 ({upcomingMatches.length})
             </h3>
-            {matches
+            {upcomingMatches
               .filter((m) => activeSport === 'ALL' || m.sport === activeSport)
               .map((m) => (
                 <button
